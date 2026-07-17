@@ -1,0 +1,10 @@
+{
+	"id": "pratiquer",
+	"name": "Send to Pratiquer",
+	"version": "0.1.0",
+	"minAppVersion": "1.4.0",
+	"description": "Push a vocab-list note straight into a Pratiquer flashcard set, with AI image/audio/translate refinements.",
+	"author": "Paul Heald",
+	"authorUrl": "https://github.com/paulheald",
+	"isDesktopOnly": false
+}

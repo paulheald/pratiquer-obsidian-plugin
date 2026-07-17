@@ -1,0 +1,22 @@
+{
+	"name": "pratiquer-obsidian-plugin",
+	"version": "0.1.0",
+	"description": "Send vocab lists straight from Obsidian into Pratiquer flashcard sets.",
+	"main": "main.js",
+	"scripts": {
+		"dev": "node esbuild.config.mjs",
+		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+		"typecheck": "tsc -noEmit -skipLibCheck"
+	},
+	"keywords": [],
+	"author": "Paul Heald",
+	"license": "MIT",
+	"devDependencies": {
+		"@types/node": "^20.11.5",
+		"builtin-modules": "3.3.0",
+		"esbuild": "0.19.11",
+		"obsidian": "latest",
+		"tslib": "2.6.2",
+		"typescript": "5.3.3"
+	}
+}
