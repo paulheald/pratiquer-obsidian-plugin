@@ -33,6 +33,23 @@ This plugin isn't in the community plugin directory yet. Install it via [BRAT](h
 4. Pick which refinements to run (auto-translate, AI/Pixabay image, TTS audio) — this dialog remembers your last choice per-note, so a note you send to repeatedly stays configured the way you like it.
 5. Confirm. The plugin reports back how many cards were added once Pratiquer finishes generating them.
 
+### Resending / a running list
+
+The first time you send a note, the plugin writes a few bookkeeping keys into
+that note's YAML frontmatter (`pratiquer-set-id`, `pratiquer-synced-line-count`,
+`pratiquer-refinements`) — Obsidian shows these as the note's Properties, not
+as visible text in the note body. Don't delete them if you plan to keep
+appending to the list.
+
+On every later send from the same note, the plugin automatically re-targets
+the same flashcard set (no picker) and only sends lines **added since the
+last send** — so you can keep appending new words to the bottom of a running
+list and re-run the command as often as you like without creating duplicate
+cards. **Known limitation**: this tracks a line *count*, not line *content* —
+inserting a new line above previously-sent ones (rather than appending below
+them) will re-send that line as a duplicate. Keep new words at the bottom of
+the list.
+
 ## Development
 
 ```bash

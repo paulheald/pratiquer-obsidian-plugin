@@ -20,6 +20,10 @@ const TERMINAL_STATUSES = new Set(["complete", "partial", "failed"]);
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 120_000;
 
+const FM_SET_ID = "pratiquer-set-id";
+const FM_SYNCED_COUNT = "pratiquer-synced-line-count";
+const FM_REFINEMENTS = "pratiquer-refinements";
+
 /** Same line-splitting rule as the web app's paste box
  * (frontend/src/app/pages/batch-create/batch-create.component.ts:544) so a
  * note with one term per line maps 1:1 to a flashcard front, no new parsing
@@ -63,6 +67,24 @@ export default class PratiquerPlugin extends Plugin {
 		return new PratiquerClient(resolveBaseUrl(this.settings), this.settings.token);
 	}
 
+	/** Strips the note's own YAML frontmatter (if any) before splitting into
+	 * flashcard lines. Uses the metadata cache's exact frontmatterPosition
+	 * offset rather than a hand-rolled `---`-delimiter regex, since that's
+	 * what Obsidian itself already computed from the real parse.
+	 *
+	 * Found 2026-07-17 via real-device testing: without this, a note that had
+	 * ever been sent before (and so already carries this plugin's own
+	 * pratiquer-refinements/pratiquer-set-id/pratiquer-synced-line-count keys)
+	 * gets its frontmatter's raw YAML lines sent as flashcard content on the
+	 * *next* send -- "pratiquer-refinements:", "translate: true", "---", etc.
+	 * each became their own nonsense card. This wasn't caught earlier because
+	 * every send exercised in this environment's testing was a note's FIRST
+	 * send, which has no frontmatter yet to leak. */
+	private stripFrontmatter(content: string, file: TFile): string {
+		const pos = this.app.metadataCache.getFileCache(file)?.frontmatterPosition;
+		return pos ? content.slice(pos.end.offset) : content;
+	}
+
 	private async sendToPratiquer(): Promise<void> {
 		const file = this.app.workspace.getActiveFile();
 		if (!file) {
@@ -70,9 +92,9 @@ export default class PratiquerPlugin extends Plugin {
 			return;
 		}
 
-		const content = await this.app.vault.cachedRead(file);
-		const lines = splitLines(content);
-		if (lines.length === 0) {
+		const rawContent = await this.app.vault.cachedRead(file);
+		const allLines = splitLines(this.stripFrontmatter(rawContent, file));
+		if (allLines.length === 0) {
 			new Notice("This note has no lines to send.");
 			return;
 		}
@@ -93,18 +115,42 @@ export default class PratiquerPlugin extends Plugin {
 			return;
 		}
 
+		// Dedup (added 2026-07-17, prompted by real testing surfacing both
+		// this bug and the request for it): a note that's already been sent
+		// once carries pratiquer-set-id + pratiquer-synced-line-count in its
+		// frontmatter. If that target set still exists/is still visible to
+		// this account, skip the picker entirely and only send lines past
+		// the offset -- known limitation carried over from the parent design
+		// doc: inserting a line ABOVE previously-synced ones re-sends it,
+		// since this is a line-count offset, not a content hash. Good enough
+		// for a running list that only ever grows at the bottom.
+		const cache = this.app.metadataCache.getFileCache(file);
+		const stickySetId = cache?.frontmatter?.[FM_SET_ID] as number | undefined;
+		const syncedCount = (cache?.frontmatter?.[FM_SYNCED_COUNT] as number | undefined) ?? 0;
+		const stickySet = stickySetId !== undefined ? sets.find((s) => s.id === stickySetId) : undefined;
+
+		if (stickySet) {
+			const newLines = allLines.slice(syncedCount);
+			if (newLines.length === 0) {
+				new Notice(`Nothing new to send -- all ${allLines.length} line(s) already sent to "${stickySet.name}".`);
+				return;
+			}
+			await this.chooseRefinementsAndSend(file, client, stickySet, allLines, newLines);
+			return;
+		}
+
 		new SetPickerModal(this.app, sets, async (result) => {
 			if (result.createNew) {
 				new CreateSetModal(this.app, async (input) => {
 					try {
 						const created = await client.createSet(input.name, input.sourceLang, input.targetLang);
-						await this.chooseRefinementsAndSend(file, client, created, lines);
+						await this.chooseRefinementsAndSend(file, client, created, allLines, allLines);
 					} catch (e) {
 						new Notice(`Failed to create set: ${e instanceof Error ? e.message : e}`, 8000);
 					}
 				}).open();
 			} else {
-				await this.chooseRefinementsAndSend(file, client, result.set, lines);
+				await this.chooseRefinementsAndSend(file, client, result.set, allLines, allLines);
 			}
 		}).open();
 	}
@@ -112,15 +158,10 @@ export default class PratiquerPlugin extends Plugin {
 	/** Per-file default resolution (2026-07-17 revision of Open Question 1):
 	 * a note's own pratiquer-refinements frontmatter wins if present; falls
 	 * back to the plugin's global last-used setting when the note has none
-	 * yet. This is a plain preference-memory mechanism, distinct from (and
-	 * much simpler than) the frontmatter-based resend/dedup line-tracking
-	 * that OBSIDIAN_PLUGIN_PLAN.md §4 describes and that this POC explicitly
-	 * does not implement. */
+	 * yet. */
 	private resolveDefaultSupports(file: TFile): GenerationSupports {
 		const cache = this.app.metadataCache.getFileCache(file);
-		const perFile = cache?.frontmatter?.["pratiquer-refinements"] as
-			| GenerationSupports
-			| undefined;
+		const perFile = cache?.frontmatter?.[FM_REFINEMENTS] as GenerationSupports | undefined;
 		return perFile ?? this.settings.lastUsedSupports;
 	}
 
@@ -128,29 +169,27 @@ export default class PratiquerPlugin extends Plugin {
 		file: TFile,
 		client: PratiquerClient,
 		targetSet: FlashcardSet,
-		lines: string[]
+		allLines: string[],
+		linesToSend: string[]
 	): Promise<void> {
 		const defaults = this.resolveDefaultSupports(file);
 		new RefinementModal(this.app, targetSet, defaults, client, async (supports) => {
-			// Persist as both the per-file default (frontmatter) and the
-			// global last-used fallback for files that have no default yet.
-			await this.app.fileManager.processFrontMatter(file, (fm) => {
-				fm["pratiquer-refinements"] = supports;
-			});
 			this.settings.lastUsedSupports = supports;
 			await this.saveSettings();
 
-			await this.doSend(client, targetSet, lines, supports);
+			await this.doSend(file, client, targetSet, allLines, linesToSend, supports);
 		}).open();
 	}
 
 	private async doSend(
+		file: TFile,
 		client: PratiquerClient,
 		targetSet: FlashcardSet,
-		lines: string[],
+		allLines: string[],
+		linesToSend: string[],
 		supports: GenerationSupports
 	): Promise<void> {
-		const items: BatchItem[] = lines.map((line) => ({ side_a_text: line }));
+		const items: BatchItem[] = linesToSend.map((line) => ({ side_a_text: line }));
 		let batchId: string;
 		try {
 			const result = await client.submitBatch(targetSet.id, items, supports);
@@ -160,8 +199,18 @@ export default class PratiquerPlugin extends Plugin {
 			return;
 		}
 
-		new Notice(`Sending ${lines.length} card(s) to "${targetSet.name}"...`);
-		await this.pollUntilDone(client, targetSet, batchId, lines.length);
+		// Persist dedup + per-file refinement bookkeeping now, right after a
+		// successful submit -- the cards are queued at this point regardless
+		// of how polling below goes, so re-running the command before
+		// polling finishes must not re-submit the same lines a second time.
+		await this.app.fileManager.processFrontMatter(file, (fm) => {
+			fm[FM_SET_ID] = targetSet.id;
+			fm[FM_SYNCED_COUNT] = allLines.length;
+			fm[FM_REFINEMENTS] = supports;
+		});
+
+		new Notice(`Sending ${linesToSend.length} card(s) to "${targetSet.name}"...`);
+		await this.pollUntilDone(client, targetSet, batchId, linesToSend.length);
 	}
 
 	/** Phase 7: plain polling, not the web app's WebSocket channel --
