@@ -131,8 +131,26 @@ export class PratiquerClient {
 		return this.request("POST", `/sets/${setId}/flashcards/batch-jobs`, {
 			items,
 			supports,
-			source: "paste",
+			// Distinct from "paste" (a human pasting a list in the web app's own
+			// batch-create screen) so GET /account/recent-obsidian-sets can tell
+			// the two apart -- see recentSets() below.
+			source: "obsidian",
 		});
+	}
+
+	/** Up to `limit` sets this account most recently sent cards into from this
+	 * plugin, most-recent first -- powers SetPickerModal's "recently used"
+	 * shortcut so re-adding a few more words to an existing running list
+	 * doesn't require scrolling/searching the full set list. 404s (returned
+	 * as an empty array here, not thrown) if OBSIDIAN_INTEGRATION_ENABLED is
+	 * off server-side, same flag that gates every other endpoint this client
+	 * calls. */
+	async recentSets(limit = 5): Promise<FlashcardSet[]> {
+		try {
+			return await this.request<FlashcardSet[]>("GET", `/account/recent-obsidian-sets?limit=${limit}`);
+		} catch (e) {
+			return [];
+		}
 	}
 
 	async pollBatch(setId: number, batchId: string): Promise<CardGenerationJob[]> {

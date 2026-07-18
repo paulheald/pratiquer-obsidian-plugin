@@ -142,7 +142,15 @@ export default class PratiquerPlugin extends Plugin {
 			return;
 		}
 
-		new SetPickerModal(this.app, sets, async (result) => {
+		// Only fetched when the picker is actually going to be shown (a sticky
+		// note-frontmatter target skips it entirely, above) -- no point paying
+		// for the extra round trip otherwise. A failure here (e.g. the
+		// OBSIDIAN_INTEGRATION_ENABLED flag being off) degrades to an empty
+		// list rather than blocking the send, since recentSets() itself never
+		// throws -- see PratiquerClient.recentSets().
+		const recentSets = await client.recentSets();
+
+		new SetPickerModal(this.app, sets, recentSets, async (result) => {
 			if (result.createNew) {
 				new CreateSetModal(this.app, async (input) => {
 					try {
