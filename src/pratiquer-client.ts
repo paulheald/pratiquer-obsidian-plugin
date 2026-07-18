@@ -25,6 +25,7 @@ export interface FlashcardSet {
 }
 
 export interface GenerationSupports {
+	spellcheck?: boolean;
 	translate?: boolean;
 	image?: "none" | "ai" | "pixabay";
 	image_target?: "a" | "b" | "both";

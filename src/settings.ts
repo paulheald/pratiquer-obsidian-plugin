@@ -32,6 +32,7 @@ export const DEFAULT_SETTINGS: PratiquerSettings = {
 	customUrl: "",
 	token: "",
 	lastUsedSupports: {
+		spellcheck: true,
 		translate: true,
 		image: "none",
 		audio: false,

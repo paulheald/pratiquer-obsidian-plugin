@@ -16,7 +16,10 @@ import { SetPickerModal } from "./set-picker-modal";
 import { CreateSetModal } from "./create-set-modal";
 import { RefinementModal } from "./refinement-modal";
 
-const TERMINAL_STATUSES = new Set(["complete", "partial", "failed"]);
+// needs_review is terminal for polling purposes -- the job won't change
+// status again on its own, it's waiting on a human correction in the web
+// app's spelling review queue (see backend generation_job_service.py).
+const TERMINAL_STATUSES = new Set(["complete", "partial", "failed", "needs_review"]);
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 120_000;
 
@@ -236,12 +239,17 @@ export default class PratiquerPlugin extends Plugin {
 			const allDone = jobs.length > 0 && jobs.every((j) => TERMINAL_STATUSES.has(j.status));
 			if (allDone) {
 				const failed = jobs.filter((j) => j.status === "failed").length;
-				const succeeded = jobs.length - failed;
-				new Notice(
-					failed > 0
-						? `${succeeded}/${jobs.length} added to "${targetSet.name}", ${failed} failed -- see Pratiquer for details.`
-						: `${succeeded}/${jobs.length} card(s) added to "${targetSet.name}".`
-				);
+				const needsReview = jobs.filter((j) => j.status === "needs_review").length;
+				const succeeded = jobs.length - failed - needsReview;
+
+				const parts = [`${succeeded}/${jobs.length} card(s) added to "${targetSet.name}"`];
+				if (needsReview > 0) {
+					parts.push(`${needsReview} need spelling review in the Pratiquer web app`);
+				}
+				if (failed > 0) {
+					parts.push(`${failed} failed`);
+				}
+				new Notice(parts.join(", ") + ".");
 				return;
 			}
 

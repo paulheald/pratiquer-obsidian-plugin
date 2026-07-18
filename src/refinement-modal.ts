@@ -53,6 +53,15 @@ export class RefinementModal extends Modal {
 		contentEl.createEl("h2", { text: `Send to "${this.targetSet.name}"` });
 
 		new Setting(contentEl)
+			.setName("Spell check on import")
+			.setDesc(
+				"Catch missing accents and typos (e.g. \"maitresse\" -> \"maîtresse\") before a card is created. Flagged lines pause for review in the Pratiquer web app instead of becoming bad cards."
+			)
+			.addToggle((tg) =>
+				tg.setValue(!!this.supports.spellcheck).onChange((v) => (this.supports.spellcheck = v))
+			);
+
+		new Setting(contentEl)
 			.setName("Auto-fill other side")
 			.setDesc("Translate each line into the set's other language.")
 			.addToggle((tg) =>
