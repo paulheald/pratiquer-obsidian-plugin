@@ -153,6 +153,42 @@ function splitLines(text: string): string[] {
 		.filter(Boolean);
 }
 
+interface ParsedLineItem {
+	text: string;
+	/** The line's sentence with `==...==` markup stripped, when the
+	 * highlighted word doesn't already make up the whole line -- becomes the
+	 * card's context note. */
+	context?: string;
+}
+
+const HIGHLIGHT = /==(.+?)==/g;
+
+/** A line with no `==highlight==` becomes one plain-word card, same as
+ * always. A line that wraps a word in Obsidian's own native highlight
+ * syntax -- "Il a couru pour ==attraper== le bus." -- becomes one card for
+ * "attraper" with the whole sentence (markup stripped) captured as context,
+ * the same {word, sentence} shape a real e-reader highlight produces (see
+ * obsidian-plugin-plan.md's #1). Multiple highlights on one line each
+ * become their own card, all sharing that line's sentence as context --
+ * "Il a ==couru== pour attraper le ==bus==." makes two cards, not one. */
+function parseLine(line: string): ParsedLineItem[] {
+	const matches = [...line.matchAll(HIGHLIGHT)];
+	if (matches.length === 0) return [{ text: line }];
+
+	const sentence = line.replace(HIGHLIGHT, "$1").trim();
+	return matches
+		.map((m) => m[1].trim())
+		.filter((word) => word.length > 0)
+		.map((word) => ({
+			text: word,
+			// Skip the context note when the highlight *is* the whole line
+			// (e.g. "==maison==" alone, no surrounding sentence) -- the
+			// "context" would just be the word itself, redundant with the
+			// card's own front text.
+			context: sentence.toLowerCase() === word.toLowerCase() ? undefined : sentence,
+		}));
+}
+
 export default class PratiquerPlugin extends Plugin {
 	settings: PratiquerSettings;
 
@@ -409,10 +445,16 @@ export default class PratiquerPlugin extends Plugin {
 		// e-reader's book title/author would eventually add. See
 		// obsidian-plugin-plan.md's #2.
 		const sourceNote = `Captured from Obsidian note "${file.basename}"`;
-		const items: BatchItem[] = linesToSend.map((line) =>
-			listSide === "b"
-				? { side_b_text: line, notes: sourceNote }
-				: { side_a_text: line, notes: sourceNote }
+		const items: BatchItem[] = linesToSend.flatMap((line) =>
+			parseLine(line).map((parsed) => {
+				// Example-sentence context (from a ==highlight==) leads, with
+				// the source note as a second line -- most useful information
+				// first, same field either way.
+				const notes = parsed.context ? `${parsed.context}\n\n${sourceNote}` : sourceNote;
+				return listSide === "b"
+					? { side_b_text: parsed.text, notes }
+					: { side_a_text: parsed.text, notes };
+			})
 		);
 		let batchId: string;
 		try {
@@ -434,8 +476,11 @@ export default class PratiquerPlugin extends Plugin {
 			writeSupportsToFrontmatter(fm, supports);
 		});
 
-		new Notice(`Sending ${linesToSend.length} card(s) to "${targetSet.name}"...`);
-		await this.pollUntilDone(client, targetSet, batchId, linesToSend.length);
+		// items.length, not linesToSend.length -- a line with more than one
+		// ==highlight== produces more than one card (see parseLine above), so
+		// the two counts can now genuinely differ.
+		new Notice(`Sending ${items.length} card(s) to "${targetSet.name}"...`);
+		await this.pollUntilDone(client, targetSet, batchId, items.length);
 	}
 
 	/** Phase 7: plain polling, not the web app's WebSocket channel --

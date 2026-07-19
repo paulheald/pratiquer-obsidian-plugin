@@ -45,6 +45,16 @@ This plugin isn't in the community plugin directory yet — BRAT is a temporary 
 4. Pick which refinements to run (auto-translate, spellcheck, AI/Pixabay image, TTS audio) — this dialog remembers your last choice per-note, so a note you send to repeatedly stays configured the way you like it.
 5. Confirm. The plugin reports back how many cards were added once Pratiquer finishes generating them, and flags anything that needs a quick spelling review in the web app.
 
+### Capturing a word in context
+
+A bare line becomes a bare-word card, same as always. But if you're jotting words down as you read rather than keeping a plain list, wrap the word in Obsidian's own `==highlight==` syntax right inside the sentence:
+
+```
+Il a couru pour ==attraper== le bus.
+```
+
+That line becomes one card for **attraper**, with the whole sentence saved as its usage context — visible in Pratiquer's editor under "Personal Notes & Usage Context." A line with more than one highlighted word makes one card per word, all sharing that sentence as context.
+
 ### Changing where a note is headed
 
 Every send shows a **Destination** card naming the flashcard set it's about to add cards to, with a **Change...** button — pick a different existing set or create a new one right there, no need to hand-edit the note's frontmatter. If a note is already bound to a set but you have nothing new to send right now, run **Change destination flashcard set** from the command palette to retarget it directly.
