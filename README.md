@@ -40,7 +40,7 @@ This plugin isn't in the community plugin directory yet — BRAT is a temporary 
 
 1. Open a note with one vocabulary term per line.
 2. Run **Send to Pratiquer** from the command palette, or click the ribbon icon.
-3. Choose an existing flashcard set, pick one of your five most recently-used sets, or create a new one — and tell it which language your list is actually written in, so words land on the right side of the card.
+3. Choose an existing flashcard set, pick one of your five most recently-used sets, or create a new one — creating a new set also asks which language your list is actually written in (so words land on the right side of the card) and which subject to tag it with (Science, History, General Education, ...), the same tagging the web app's set settings offer.
 4. Pick which refinements to run (auto-translate, spellcheck, AI/Pixabay image, TTS audio) — this dialog remembers your last choice per-note, so a note you send to repeatedly stays configured the way you like it.
 5. Confirm. The plugin reports back how many cards were added once Pratiquer finishes generating them, and flags anything that needs a quick spelling review in the web app.
 
@@ -52,9 +52,10 @@ Every send shows a **Destination** card naming the flashcard set it's about to a
 
 The first time you send a note, the plugin writes a few bookkeeping keys into
 that note's YAML frontmatter (`pratiquer-set-id`, `pratiquer-synced-line-count`,
-`pratiquer-refinements`, `pratiquer-list-side`) — Obsidian shows these as the note's Properties, not
-as visible text in the note body. Don't delete them if you plan to keep
-appending to the list.
+`pratiquer-list-side`, and one `pratiquer-*` key per refinement — `pratiquer-spellcheck`,
+`pratiquer-translate`, `pratiquer-image`, `pratiquer-audio`, etc.) — Obsidian shows
+these as the note's Properties (checkboxes for on/off refinements, plain text for the
+rest), not as raw YAML/JSON. Don't delete them if you plan to keep appending to the list.
 
 On every later send from the same note, the plugin automatically re-targets
 the same flashcard set (no picker) and only sends lines **added since the

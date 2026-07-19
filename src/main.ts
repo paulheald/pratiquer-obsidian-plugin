@@ -15,6 +15,7 @@ import {
 import { SetPickerModal } from "./set-picker-modal";
 import { CreateSetModal } from "./create-set-modal";
 import { RefinementModal } from "./refinement-modal";
+import { langLabel } from "./lang-utils";
 
 // needs_review is terminal for polling purposes -- the job won't change
 // status again on its own, it's waiting on a human correction in the web
@@ -25,8 +26,107 @@ const POLL_TIMEOUT_MS = 120_000;
 
 const FM_SET_ID = "pratiquer-set-id";
 const FM_SYNCED_COUNT = "pratiquer-synced-line-count";
-const FM_REFINEMENTS = "pratiquer-refinements";
 const FM_LIST_SIDE = "pratiquer-list-side";
+
+// Flat per-refinement frontmatter keys (v0.6.0+) -- each shows up in
+// Obsidian's native Properties panel as its own proper Checkbox/Text field.
+// Previously this was one `pratiquer-refinements` key holding the whole
+// GenerationSupports object as a nested YAML blob, which the Properties
+// panel can't render as anything but raw-looking text -- exactly what a
+// user asked to get away from ("I was expecting UI instead of JSON").
+const FM_SPELLCHECK = "pratiquer-spellcheck";
+const FM_TRANSLATE = "pratiquer-translate";
+const FM_IMAGE = "pratiquer-image";
+const FM_IMAGE_TARGET = "pratiquer-image-target";
+const FM_AUDIO = "pratiquer-audio";
+const FM_AUDIO_TARGET = "pratiquer-audio-target";
+const FM_AUDIO_VOICE_A = "pratiquer-audio-voice-a";
+const FM_AUDIO_PROVIDER_A = "pratiquer-audio-provider-a";
+const FM_AUDIO_VOICE_B = "pratiquer-audio-voice-b";
+const FM_AUDIO_PROVIDER_B = "pratiquer-audio-provider-b";
+/** Superseded by the flat FM_* keys above -- kept read-only so notes sent by
+ * an older plugin version don't silently lose their per-note refinement
+ * defaults on the first send after upgrading. Never written again. */
+const FM_REFINEMENTS_LEGACY = "pratiquer-refinements";
+
+/** Writes `supports` as the flat FM_* keys above, and clears any leftover
+ * nested legacy blob. Keys for a refinement that's off/unset are deleted
+ * rather than written as empty, so the Properties panel only ever shows
+ * what's actually active (no "audio-voice-a: " clutter when audio is off). */
+function writeSupportsToFrontmatter(fm: Record<string, unknown>, supports: GenerationSupports): void {
+	delete fm[FM_REFINEMENTS_LEGACY];
+
+	fm[FM_SPELLCHECK] = !!supports.spellcheck;
+	fm[FM_TRANSLATE] = !!supports.translate;
+	fm[FM_IMAGE] = supports.image ?? "none";
+	fm[FM_AUDIO] = !!supports.audio;
+
+	if (supports.image && supports.image !== "none") {
+		fm[FM_IMAGE_TARGET] = supports.image_target ?? "a";
+	} else {
+		delete fm[FM_IMAGE_TARGET];
+	}
+
+	if (supports.audio) {
+		fm[FM_AUDIO_TARGET] = supports.audio_target ?? "a";
+		if (supports.audio_voice_a) fm[FM_AUDIO_VOICE_A] = supports.audio_voice_a;
+		else delete fm[FM_AUDIO_VOICE_A];
+		if (supports.audio_provider_a) fm[FM_AUDIO_PROVIDER_A] = supports.audio_provider_a;
+		else delete fm[FM_AUDIO_PROVIDER_A];
+		if (supports.audio_voice_b) fm[FM_AUDIO_VOICE_B] = supports.audio_voice_b;
+		else delete fm[FM_AUDIO_VOICE_B];
+		if (supports.audio_provider_b) fm[FM_AUDIO_PROVIDER_B] = supports.audio_provider_b;
+		else delete fm[FM_AUDIO_PROVIDER_B];
+	} else {
+		delete fm[FM_AUDIO_TARGET];
+		delete fm[FM_AUDIO_VOICE_A];
+		delete fm[FM_AUDIO_PROVIDER_A];
+		delete fm[FM_AUDIO_VOICE_B];
+		delete fm[FM_AUDIO_PROVIDER_B];
+	}
+}
+
+/** Reads a per-note refinement default back out of frontmatter -- prefers
+ * the flat FM_* keys, falling back to the legacy nested blob for notes sent
+ * before v0.6.0 so they don't reset to the plugin's global default on their
+ * first post-upgrade send. */
+function readSupportsFromFrontmatter(fm: Record<string, unknown> | undefined): GenerationSupports | undefined {
+	if (!fm) return undefined;
+	if (FM_SPELLCHECK in fm || FM_TRANSLATE in fm || FM_IMAGE in fm || FM_AUDIO in fm) {
+		return {
+			spellcheck: !!fm[FM_SPELLCHECK],
+			translate: !!fm[FM_TRANSLATE],
+			image: (fm[FM_IMAGE] as GenerationSupports["image"]) ?? "none",
+			image_target: fm[FM_IMAGE_TARGET] as GenerationSupports["image_target"],
+			audio: !!fm[FM_AUDIO],
+			audio_target: fm[FM_AUDIO_TARGET] as GenerationSupports["audio_target"],
+			audio_voice_a: fm[FM_AUDIO_VOICE_A] as string | undefined,
+			audio_provider_a: fm[FM_AUDIO_PROVIDER_A] as string | undefined,
+			audio_voice_b: fm[FM_AUDIO_VOICE_B] as string | undefined,
+			audio_provider_b: fm[FM_AUDIO_PROVIDER_B] as string | undefined,
+		};
+	}
+	return fm[FM_REFINEMENTS_LEGACY] as GenerationSupports | undefined;
+}
+
+/** Formats `pratiquer-list-side` as "Side A (French)" instead of a bare "a"
+ * -- readable directly in Obsidian's Properties panel without having to
+ * cross-reference which side of the set "a" even means. */
+function formatListSide(side: "a" | "b", targetSet: FlashcardSet): string {
+	const lang = side === "b" ? targetSet.target_lang : targetSet.source_lang;
+	return `Side ${side.toUpperCase()} (${langLabel(lang)})`;
+}
+
+/** Parses a stored list-side value back to "a"/"b". Accepts both the
+ * friendly "Side A (French)" format (v0.6.0+) and the bare "a"/"b" a note
+ * may still carry from an older plugin version. */
+function parseListSide(value: unknown): "a" | "b" | undefined {
+	if (value === "a" || value === "b") return value;
+	if (typeof value !== "string") return undefined;
+	if (/^side\s*a\b/i.test(value)) return "a";
+	if (/^side\s*b\b/i.test(value)) return "b";
+	return undefined;
+}
 
 /** Same line-splitting rule as the web app's paste box
  * (frontend/src/app/pages/batch-create/batch-create.component.ts:544) so a
@@ -148,7 +248,7 @@ export default class PratiquerPlugin extends Plugin {
 			// Reuse the list-side answer from this note's first send (stored in
 			// its frontmatter below) rather than asking again on every follow-up
 			// send to the same running list.
-			const stickyListSide = cache?.frontmatter?.[FM_LIST_SIDE] as "a" | "b" | undefined;
+			const stickyListSide = parseListSide(cache?.frontmatter?.[FM_LIST_SIDE]);
 			await this.chooseRefinementsAndSend(file, client, stickySet, allLines, newLines, stickyListSide ?? null);
 			return;
 		}
@@ -213,12 +313,12 @@ export default class PratiquerPlugin extends Plugin {
 
 		new SetPickerModal(this.app, sets, recentSets, async (result) => {
 			if (result.createNew) {
-				new CreateSetModal(this.app, async (input) => {
+				new CreateSetModal(this.app, client, async (input) => {
 					try {
 						// listLang -> source_lang (side A), knownLang -> target_lang
 						// (side B) -- matches the fact every line always lands in
 						// side_a_text below, so side A must be the note's own language.
-						const created = await client.createSet(input.name, input.listLang, input.knownLang);
+						const created = await client.createSet(input.name, input.listLang, input.knownLang, input.subject);
 						// Freshly created with source_lang = the note's own language, so
 						// side A is guaranteed correct -- no need to ask again.
 						await this.chooseRefinementsAndSend(file, client, created, allLines, allLines, "a");
@@ -236,12 +336,11 @@ export default class PratiquerPlugin extends Plugin {
 	}
 
 	/** Per-file default resolution (2026-07-17 revision of Open Question 1):
-	 * a note's own pratiquer-refinements frontmatter wins if present; falls
-	 * back to the plugin's global last-used setting when the note has none
-	 * yet. */
+	 * a note's own refinement frontmatter wins if present; falls back to the
+	 * plugin's global last-used setting when the note has none yet. */
 	private resolveDefaultSupports(file: TFile): GenerationSupports {
 		const cache = this.app.metadataCache.getFileCache(file);
-		const perFile = cache?.frontmatter?.[FM_REFINEMENTS] as GenerationSupports | undefined;
+		const perFile = readSupportsFromFrontmatter(cache?.frontmatter);
 		return perFile ?? this.settings.lastUsedSupports;
 	}
 
@@ -307,8 +406,8 @@ export default class PratiquerPlugin extends Plugin {
 		await this.app.fileManager.processFrontMatter(file, (fm) => {
 			fm[FM_SET_ID] = targetSet.id;
 			fm[FM_SYNCED_COUNT] = allLines.length;
-			fm[FM_REFINEMENTS] = supports;
-			fm[FM_LIST_SIDE] = listSide;
+			fm[FM_LIST_SIDE] = formatListSide(listSide, targetSet);
+			writeSupportsToFrontmatter(fm, supports);
 		});
 
 		new Notice(`Sending ${linesToSend.length} card(s) to "${targetSet.name}"...`);

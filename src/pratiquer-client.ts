@@ -56,6 +56,12 @@ export interface TtsVoice {
 	label: string;
 }
 
+export interface SubjectOption {
+	value: string;
+	label: string;
+	icon?: string;
+}
+
 export class PratiquerApiError extends Error {
 	constructor(public status: number, message: string) {
 		super(message);
@@ -114,13 +120,33 @@ export class PratiquerClient {
 	async createSet(
 		name: string,
 		sourceLang: string,
-		targetLang: string
+		targetLang: string,
+		/** "general" (the backend's own default, see flashcards.py's
+		 * create_group) when the subject picker degraded to nothing -- an old
+		 * backend without GET /subjects, or the fetch simply failing. Passed
+		 * explicitly rather than omitted so this plugin's behavior doesn't
+		 * silently depend on the server's own default staying "general". */
+		subject: string
 	): Promise<FlashcardSet> {
 		return this.request<FlashcardSet>("POST", "/sets", {
 			name,
 			source_lang: sourceLang,
 			target_lang: targetLang,
+			settings: { subject },
 		});
+	}
+
+	/** General-education subject options for CreateSetModal's picker (Science,
+	 * History, ...) -- mirrors the web app's SetConfigDialogComponent. Degrades
+	 * to an empty array (never throws) on an old backend that predates
+	 * GET /subjects, same pattern as recentSets() below -- the modal falls
+	 * back to plain "general" rather than blocking set creation. */
+	async subjects(): Promise<SubjectOption[]> {
+		try {
+			return await this.request<SubjectOption[]>("GET", "/subjects");
+		} catch (e) {
+			return [];
+		}
 	}
 
 	async submitBatch(

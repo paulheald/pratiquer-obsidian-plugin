@@ -1,11 +1,20 @@
 import { App, Modal, Setting, setIcon } from "obsidian";
 import { SUPPORTED_LANGUAGES } from "./settings";
+import { PratiquerClient, SubjectOption } from "./pratiquer-client";
 
 export interface NewSetInput {
 	name: string;
 	listLang: string;
 	knownLang: string;
+	subject: string;
 }
+
+/** Shown immediately while the real list loads from GET /subjects, and kept
+ * as the only option if that fetch degrades to empty (old backend, or a
+ * network failure) -- "general" is also the backend's own default
+ * (flashcards.py's create_group), so a set created before/without the real
+ * list still lands exactly where it would have with no subject picker at all. */
+const FALLBACK_SUBJECTS: SubjectOption[] = [{ value: "general", label: "General Education", icon: "school" }];
 
 /** Phase 6: create-new-set flow. Deliberately asks for both languages
  * explicitly rather than silently defaulting source_lang server-side
@@ -27,13 +36,29 @@ export class CreateSetModal extends Modal {
 	private name = "";
 	private listLang = "fr";
 	private knownLang = "en";
+	private subject = FALLBACK_SUBJECTS[0].value;
+	private subjectOptions: SubjectOption[] = FALLBACK_SUBJECTS;
 
-	constructor(app: App, private onSubmit: (input: NewSetInput) => void) {
+	constructor(app: App, private client: PratiquerClient, private onSubmit: (input: NewSetInput) => void) {
 		super(app);
 	}
 
 	onOpen(): void {
+		this.render();
+		void this.loadSubjects();
+	}
+
+	private async loadSubjects(): Promise<void> {
+		const subjects = await this.client.subjects();
+		if (subjects.length > 0) {
+			this.subjectOptions = subjects;
+			this.render();
+		}
+	}
+
+	private render(): void {
 		const { contentEl } = this;
+		contentEl.empty();
 		contentEl.addClass("pratiquer-modal");
 
 		const header = contentEl.createDiv({ cls: "pratiquer-modal-header" });
@@ -41,10 +66,16 @@ export class CreateSetModal extends Modal {
 		setIcon(icon, "plus-circle");
 		header.createEl("h2", { text: "Create a new flashcard set" });
 
+		// .setValue(this.name) here (not just onChange) so a re-render
+		// triggered by loadSubjects() resolving mid-typing doesn't visually
+		// wipe out whatever the user's already entered.
 		new Setting(contentEl).setName("Set name").addText((text) =>
-			text.setPlaceholder("e.g. French Vocab").onChange((value) => {
-				this.name = value;
-			})
+			text
+				.setPlaceholder("e.g. French Vocab")
+				.setValue(this.name)
+				.onChange((value) => {
+					this.name = value;
+				})
 		);
 
 		new Setting(contentEl)
@@ -60,6 +91,14 @@ export class CreateSetModal extends Modal {
 			dd.setValue(this.knownLang).onChange((value) => (this.knownLang = value));
 		});
 
+		new Setting(contentEl)
+			.setName("Subject")
+			.setDesc("Tags this set the same way the web app's set settings would.")
+			.addDropdown((dd) => {
+				for (const opt of this.subjectOptions) dd.addOption(opt.value, opt.label);
+				dd.setValue(this.subject).onChange((value) => (this.subject = value));
+			});
+
 		new Setting(contentEl).addButton((btn) =>
 			btn
 				.setButtonText("Create")
@@ -71,6 +110,7 @@ export class CreateSetModal extends Modal {
 						name: this.name.trim(),
 						listLang: this.listLang,
 						knownLang: this.knownLang,
+						subject: this.subject,
 					});
 				})
 		);

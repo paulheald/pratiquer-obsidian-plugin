@@ -1,15 +1,6 @@
 import { App, Modal, Notice, Setting, setIcon } from "obsidian";
 import { FlashcardSet, GenerationSupports, PratiquerClient, TtsVoice } from "./pratiquer-client";
-import { SUPPORTED_LANGUAGES } from "./settings";
-
-/** Set languages may be short ("fr", from this plugin) or full locale codes
- * ("fr-fr", from the web app) -- normalize before the SUPPORTED_LANGUAGES
- * lookup, same trick as the web app's shortLangCode(). */
-function langLabel(code: string | null | undefined): string {
-	if (!code) return "?";
-	const short = code.split("-")[0];
-	return SUPPORTED_LANGUAGES.find((l) => l.code === short)?.label ?? code;
-}
+import { langLabel } from "./lang-utils";
 
 /**
  * Confirm-before-send dialog (POC plan Phase 5) -- shown on every send, not
