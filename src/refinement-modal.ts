@@ -1,5 +1,15 @@
 import { App, Modal, Notice, Setting } from "obsidian";
 import { FlashcardSet, GenerationSupports, PratiquerClient, TtsVoice } from "./pratiquer-client";
+import { SUPPORTED_LANGUAGES } from "./settings";
+
+/** Set languages may be short ("fr", from this plugin) or full locale codes
+ * ("fr-fr", from the web app) -- normalize before the SUPPORTED_LANGUAGES
+ * lookup, same trick as the web app's shortLangCode(). */
+function langLabel(code: string | null | undefined): string {
+	if (!code) return "?";
+	const short = code.split("-")[0];
+	return SUPPORTED_LANGUAGES.find((l) => l.code === short)?.label ?? code;
+}
 
 /**
  * Confirm-before-send dialog (POC plan Phase 5) -- shown on every send, not
@@ -13,17 +23,23 @@ export class RefinementModal extends Modal {
 	private voicesA: TtsVoice[] = [];
 	private voicesB: TtsVoice[] = [];
 	private voicesLoaded = false;
+	private listSide: "a" | "b";
 
 	constructor(
 		app: App,
 		private targetSet: FlashcardSet,
 		initialSupports: GenerationSupports,
 		private client: PratiquerClient,
-		private onSubmit: (supports: GenerationSupports) => void
+		/** Non-null when the caller already knows which side the note's
+		 * language is on (e.g. a set just created from this same note) --
+		 * skips showing the "My list is in" picker below. */
+		private forceListSide: "a" | "b" | null,
+		private onSubmit: (supports: GenerationSupports, listSide: "a" | "b") => void
 	) {
 		super(app);
 		// Shallow copy -- never mutate the caller's default object in place.
 		this.supports = { ...initialSupports };
+		this.listSide = forceListSide ?? "a";
 	}
 
 	onOpen(): void {
@@ -51,6 +67,27 @@ export class RefinementModal extends Modal {
 		const { contentEl } = this;
 		contentEl.empty();
 		contentEl.createEl("h2", { text: `Send to "${this.targetSet.name}"` });
+
+		// Only asked for an existing set (forceListSide is null) with a real
+		// language pair -- this set's source_lang/target_lang were fixed when
+		// it was first created and may not match which language *this* note's
+		// words happen to be in. Getting this wrong is the exact bug reported
+		// 2026-07-18: a French note sent into a set whose side A was assumed
+		// to be French produced an inverted/mistranslated set. See
+		// batch-import-language-pairing-fix.md for the web app's version of
+		// the same fix (its "My list is in" selector).
+		if (this.forceListSide === null && this.targetSet.target_lang) {
+			new Setting(contentEl)
+				.setName("My list is in")
+				.setDesc(`Which language these lines are written in -- decides which side of "${this.targetSet.name}" they land on.`)
+				.addDropdown((dd) =>
+					dd
+						.addOption("a", langLabel(this.targetSet.source_lang))
+						.addOption("b", langLabel(this.targetSet.target_lang))
+						.setValue(this.listSide)
+						.onChange((v: "a" | "b") => (this.listSide = v))
+				);
+		}
 
 		new Setting(contentEl)
 			.setName("Spell check on import")
@@ -137,7 +174,7 @@ export class RefinementModal extends Modal {
 				.setCta()
 				.onClick(() => {
 					this.close();
-					this.onSubmit(this.supports);
+					this.onSubmit(this.supports, this.listSide);
 				})
 		);
 	}

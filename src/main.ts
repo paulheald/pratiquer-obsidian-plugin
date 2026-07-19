@@ -26,6 +26,7 @@ const POLL_TIMEOUT_MS = 120_000;
 const FM_SET_ID = "pratiquer-set-id";
 const FM_SYNCED_COUNT = "pratiquer-synced-line-count";
 const FM_REFINEMENTS = "pratiquer-refinements";
+const FM_LIST_SIDE = "pratiquer-list-side";
 
 /** Same line-splitting rule as the web app's paste box
  * (frontend/src/app/pages/batch-create/batch-create.component.ts:544) so a
@@ -138,7 +139,11 @@ export default class PratiquerPlugin extends Plugin {
 				new Notice(`Nothing new to send -- all ${allLines.length} line(s) already sent to "${stickySet.name}".`);
 				return;
 			}
-			await this.chooseRefinementsAndSend(file, client, stickySet, allLines, newLines);
+			// Reuse the list-side answer from this note's first send (stored in
+			// its frontmatter below) rather than asking again on every follow-up
+			// send to the same running list.
+			const stickyListSide = cache?.frontmatter?.[FM_LIST_SIDE] as "a" | "b" | undefined;
+			await this.chooseRefinementsAndSend(file, client, stickySet, allLines, newLines, stickyListSide ?? null);
 			return;
 		}
 
@@ -154,14 +159,22 @@ export default class PratiquerPlugin extends Plugin {
 			if (result.createNew) {
 				new CreateSetModal(this.app, async (input) => {
 					try {
-						const created = await client.createSet(input.name, input.sourceLang, input.targetLang);
-						await this.chooseRefinementsAndSend(file, client, created, allLines, allLines);
+						// listLang -> source_lang (side A), knownLang -> target_lang
+						// (side B) -- matches the fact every line always lands in
+						// side_a_text below, so side A must be the note's own language.
+						const created = await client.createSet(input.name, input.listLang, input.knownLang);
+						// Freshly created with source_lang = the note's own language, so
+						// side A is guaranteed correct -- no need to ask again.
+						await this.chooseRefinementsAndSend(file, client, created, allLines, allLines, "a");
 					} catch (e) {
 						new Notice(`Failed to create set: ${e instanceof Error ? e.message : e}`, 8000);
 					}
 				}).open();
 			} else {
-				await this.chooseRefinementsAndSend(file, client, result.set, allLines, allLines);
+				// An existing set's source_lang/target_lang were fixed whenever it
+				// was first created and may not match which language *this* note's
+				// words are in -- chooseRefinementsAndSend asks via RefinementModal.
+				await this.chooseRefinementsAndSend(file, client, result.set, allLines, allLines, null);
 			}
 		}).open();
 	}
@@ -176,19 +189,25 @@ export default class PratiquerPlugin extends Plugin {
 		return perFile ?? this.settings.lastUsedSupports;
 	}
 
+	/** forceListSide: "a" when the caller already knows the note's language
+	 * matches the set's side A (e.g. a set just created from this note, whose
+	 * source_lang was set from this same input) -- skips asking again. `null`
+	 * lets RefinementModal ask, for an existing set whose side A may or may
+	 * not match this particular note's language. */
 	private async chooseRefinementsAndSend(
 		file: TFile,
 		client: PratiquerClient,
 		targetSet: FlashcardSet,
 		allLines: string[],
-		linesToSend: string[]
+		linesToSend: string[],
+		forceListSide: "a" | "b" | null
 	): Promise<void> {
 		const defaults = this.resolveDefaultSupports(file);
-		new RefinementModal(this.app, targetSet, defaults, client, async (supports) => {
+		new RefinementModal(this.app, targetSet, defaults, client, forceListSide, async (supports, listSide) => {
 			this.settings.lastUsedSupports = supports;
 			await this.saveSettings();
 
-			await this.doSend(file, client, targetSet, allLines, linesToSend, supports);
+			await this.doSend(file, client, targetSet, allLines, linesToSend, supports, listSide);
 		}).open();
 	}
 
@@ -198,9 +217,12 @@ export default class PratiquerPlugin extends Plugin {
 		targetSet: FlashcardSet,
 		allLines: string[],
 		linesToSend: string[],
-		supports: GenerationSupports
+		supports: GenerationSupports,
+		listSide: "a" | "b"
 	): Promise<void> {
-		const items: BatchItem[] = linesToSend.map((line) => ({ side_a_text: line }));
+		const items: BatchItem[] = linesToSend.map((line) =>
+			listSide === "b" ? { side_b_text: line } : { side_a_text: line }
+		);
 		let batchId: string;
 		try {
 			const result = await client.submitBatch(targetSet.id, items, supports);
@@ -218,6 +240,7 @@ export default class PratiquerPlugin extends Plugin {
 			fm[FM_SET_ID] = targetSet.id;
 			fm[FM_SYNCED_COUNT] = allLines.length;
 			fm[FM_REFINEMENTS] = supports;
+			fm[FM_LIST_SIDE] = listSide;
 		});
 
 		new Notice(`Sending ${linesToSend.length} card(s) to "${targetSet.name}"...`);
