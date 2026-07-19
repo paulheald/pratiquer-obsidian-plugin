@@ -53,7 +53,7 @@ const FM_REFINEMENTS_LEGACY = "pratiquer-refinements";
  * nested legacy blob. Keys for a refinement that's off/unset are deleted
  * rather than written as empty, so the Properties panel only ever shows
  * what's actually active (no "audio-voice-a: " clutter when audio is off). */
-function writeSupportsToFrontmatter(fm: Record<string, unknown>, supports: GenerationSupports): void {
+function writeSupportsToFrontmatter(fm: Record<string, unknown>, supports: GenerationSupports, targetSet: FlashcardSet): void {
 	delete fm[FM_REFINEMENTS_LEGACY];
 
 	fm[FM_SPELLCHECK] = !!supports.spellcheck;
@@ -62,13 +62,13 @@ function writeSupportsToFrontmatter(fm: Record<string, unknown>, supports: Gener
 	fm[FM_AUDIO] = !!supports.audio;
 
 	if (supports.image && supports.image !== "none") {
-		fm[FM_IMAGE_TARGET] = supports.image_target ?? "a";
+		fm[FM_IMAGE_TARGET] = formatSideTarget(supports.image_target ?? "a", targetSet);
 	} else {
 		delete fm[FM_IMAGE_TARGET];
 	}
 
 	if (supports.audio) {
-		fm[FM_AUDIO_TARGET] = supports.audio_target ?? "a";
+		fm[FM_AUDIO_TARGET] = formatSideTarget(supports.audio_target ?? "a", targetSet);
 		if (supports.audio_voice_a) fm[FM_AUDIO_VOICE_A] = supports.audio_voice_a;
 		else delete fm[FM_AUDIO_VOICE_A];
 		if (supports.audio_provider_a) fm[FM_AUDIO_PROVIDER_A] = supports.audio_provider_a;
@@ -111,9 +111,9 @@ function readSupportsFromFrontmatter(fm: Record<string, unknown> | undefined): G
 			spellcheck: !!fm[FM_SPELLCHECK],
 			translate: !!fm[FM_TRANSLATE],
 			image: (fm[FM_IMAGE] as GenerationSupports["image"]) ?? "none",
-			image_target: fm[FM_IMAGE_TARGET] as GenerationSupports["image_target"],
+			image_target: parseSideTarget(fm[FM_IMAGE_TARGET]),
 			audio: !!fm[FM_AUDIO],
-			audio_target: fm[FM_AUDIO_TARGET] as GenerationSupports["audio_target"],
+			audio_target: parseSideTarget(fm[FM_AUDIO_TARGET]),
 			audio_voice_a: a.voice,
 			audio_provider_a: a.provider,
 			audio_voice_b: b.voice,
@@ -139,6 +139,30 @@ function parseListSide(value: unknown): "a" | "b" | undefined {
 	if (typeof value !== "string") return undefined;
 	if (/^side\s*a\b/i.test(value)) return "a";
 	if (/^side\s*b\b/i.test(value)) return "b";
+	return undefined;
+}
+
+/** Same readability fix as formatListSide, applied to the other two
+ * side-shaped frontmatter values (`pratiquer-image-target`,
+ * `pratiquer-audio-target`) -- these also had a bare "a"/"b"/"both", the
+ * same complaint that prompted formatListSide in the first place. */
+function formatSideTarget(target: "a" | "b" | "both", targetSet: FlashcardSet): string {
+	if (target === "both") {
+		return `Both sides (${langLabel(targetSet.source_lang)}/${langLabel(targetSet.target_lang)})`;
+	}
+	return formatListSide(target, targetSet);
+}
+
+/** Parses a stored image/audio target value back to "a"/"b"/"both". Accepts
+ * both the friendly format this plugin now writes and the bare
+ * "a"/"b"/"both" a note may still carry from before this formatting
+ * existed. */
+function parseSideTarget(value: unknown): "a" | "b" | "both" | undefined {
+	if (value === "a" || value === "b" || value === "both") return value;
+	if (typeof value !== "string") return undefined;
+	if (/^side\s*a\b/i.test(value)) return "a";
+	if (/^side\s*b\b/i.test(value)) return "b";
+	if (/^both/i.test(value)) return "both";
 	return undefined;
 }
 
@@ -473,7 +497,7 @@ export default class PratiquerPlugin extends Plugin {
 			fm[FM_SET_ID] = targetSet.id;
 			fm[FM_SYNCED_COUNT] = allLines.length;
 			fm[FM_LIST_SIDE] = formatListSide(listSide, targetSet);
-			writeSupportsToFrontmatter(fm, supports);
+			writeSupportsToFrontmatter(fm, supports, targetSet);
 		});
 
 		// items.length, not linesToSend.length -- a line with more than one
