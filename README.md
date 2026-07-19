@@ -1,8 +1,19 @@
-# Send to Pratiquer
+<p align="center">
+  <img src="assets/pratiquer-logo.png" width="420" alt="Pratiquer — flashcards & educational materials">
+</p>
 
-Push a vocabulary-list note straight into a [Pratiquer](https://app.pratiquer.co) flashcard set — as a new deck or an existing one — with one command. Optionally generates AI images, TTS audio, and auto-translation for the other side of each card as part of the same send.
+<h1 align="center">Send to Pratiquer</h1>
+<p align="center"><em>Practice smarter. Remember longer.</em></p>
 
-**Status: proof of concept.** Built to validate the plugin -> backend integration end-to-end before a wider release. See [`OBSIDIAN_PLUGIN_POC_PLAN.md`](https://github.com/paulheald/flashy_cards/blob/main/docs/development/OBSIDIAN_PLUGIN_POC_PLAN.md) in the main Pratiquer repo for the full design and phased build plan.
+Push a vocabulary-list note straight into a [Pratiquer](https://app.pratiquer.co) flashcard set — as a new deck or an existing one — with one command. AI images, TTS narration, auto-translation, and spellcheck run automatically as part of the same send, so a running list in Obsidian turns into a fully-built, ready-to-study deck without ever opening a browser.
+
+## What is Pratiquer?
+
+Pratiquer is a high-performance learning platform for language acquisition, medical terminology, and other memory-heavy subjects. It pairs a state-of-the-art spaced-repetition engine (FSRS v5) with real linguistic intelligence — grammar checking, conjugation tables, offline dictionaries, and AI-generated audio and imagery — so study time goes to the words you're actually about to forget, not the ones you already know. For educators, it's a full course-management layer on top of that same engine: rosters, assignments, a real gradebook, live in-class games, and printable materials.
+
+**🔒 Private beta.** Pratiquer is currently invite-only. Visit **[pratiquer.co](https://pratiquer.co)** to learn more and join the waitlist.
+
+**Who this plugin is for:** Send to Pratiquer is built for Pratiquer **Educator** and **Independent Learner** accounts — teachers assembling vocabulary lists for a course, and self-directed learners keeping a running study list in Obsidian and sending it into Pratiquer's spaced-repetition engine when it's ready.
 
 ## What it sends
 
@@ -29,15 +40,19 @@ This plugin isn't in the community plugin directory yet. Install it via [BRAT](h
 
 1. Open a note with one vocabulary term per line.
 2. Run **Send to Pratiquer** from the command palette, or click the ribbon icon.
-3. Choose an existing flashcard set, or create a new one.
-4. Pick which refinements to run (auto-translate, AI/Pixabay image, TTS audio) — this dialog remembers your last choice per-note, so a note you send to repeatedly stays configured the way you like it.
-5. Confirm. The plugin reports back how many cards were added once Pratiquer finishes generating them.
+3. Choose an existing flashcard set, pick one of your five most recently-used sets, or create a new one — and tell it which language your list is actually written in, so words land on the right side of the card.
+4. Pick which refinements to run (auto-translate, spellcheck, AI/Pixabay image, TTS audio) — this dialog remembers your last choice per-note, so a note you send to repeatedly stays configured the way you like it.
+5. Confirm. The plugin reports back how many cards were added once Pratiquer finishes generating them, and flags anything that needs a quick spelling review in the web app.
+
+### Changing where a note is headed
+
+Every send shows a **Destination** card naming the flashcard set it's about to add cards to, with a **Change...** button — pick a different existing set or create a new one right there, no need to hand-edit the note's frontmatter. If a note is already bound to a set but you have nothing new to send right now, run **Change destination flashcard set** from the command palette to retarget it directly.
 
 ### Resending / a running list
 
 The first time you send a note, the plugin writes a few bookkeeping keys into
 that note's YAML frontmatter (`pratiquer-set-id`, `pratiquer-synced-line-count`,
-`pratiquer-refinements`) — Obsidian shows these as the note's Properties, not
+`pratiquer-refinements`, `pratiquer-list-side`) — Obsidian shows these as the note's Properties, not
 as visible text in the note body. Don't delete them if you plan to keep
 appending to the list.
 
