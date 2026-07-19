@@ -11,7 +11,7 @@ Push a vocabulary-list note straight into a [Pratiquer](https://app.pratiquer.co
 
 Pratiquer is a high-performance learning platform for language acquisition, medical terminology, and other memory-heavy subjects. It pairs a state-of-the-art spaced-repetition engine (FSRS v5) with real linguistic intelligence — grammar checking, conjugation tables, offline dictionaries, and AI-generated audio and imagery — so study time goes to the words you're actually about to forget, not the ones you already know. For educators, it's a full course-management layer on top of that same engine: rosters, assignments, a real gradebook, live in-class games, and printable materials.
 
-**🔒 Private beta.** Pratiquer is currently invite-only. Visit **[pratiquer.co](https://pratiquer.co)** to learn more and join the waitlist.
+**🔒 Private beta.** Pratiquer is currently invite-only. Visit **[www.pratiquer.co](https://www.pratiquer.co)** to learn more and join the waitlist.
 
 **Who this plugin is for:** Send to Pratiquer is built for Pratiquer **Educator** and **Independent Learner** accounts — teachers assembling vocabulary lists for a course, and self-directed learners keeping a running study list in Obsidian and sending it into Pratiquer's spaced-repetition engine when it's ready.
 
