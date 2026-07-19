@@ -101,3 +101,12 @@
 	flex-shrink: 0;
 	font-size: 0.85em;
 }
+
+/* RefinementModal: shown in place of a side's voice dropdown when no TTS
+   provider is currently reachable/supports that language, so an unusable
+   audio toggle doesn't just silently produce no picker at all. */
+.pratiquer-voice-unavailable {
+	font-size: 0.85em;
+	color: var(--text-muted);
+	padding: 4px 0 8px;
+}

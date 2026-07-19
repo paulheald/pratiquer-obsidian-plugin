@@ -86,6 +86,18 @@ function writeSupportsToFrontmatter(fm: Record<string, unknown>, supports: Gener
 	}
 }
 
+/** A voice fixed by an older, buggy plugin build stored the dropdown's raw
+ * "<provider>:<voice>" id directly in audio_voice_a/b with no
+ * audio_provider_a/b at all (see RefinementModal's splitVoiceId -- that fix
+ * landed 2026-07-19). Splits it back apart here so a note last sent before
+ * that fix doesn't keep failing audio generation forever with a voice string
+ * no provider recognizes. */
+function repairLegacyVoice(voice: string | undefined, provider: string | undefined): { voice?: string; provider?: string } {
+	if (provider || !voice || !voice.includes(":")) return { voice, provider };
+	const idx = voice.indexOf(":");
+	return { provider: voice.slice(0, idx), voice: voice.slice(idx + 1) };
+}
+
 /** Reads a per-note refinement default back out of frontmatter -- prefers
  * the flat FM_* keys, falling back to the legacy nested blob for notes sent
  * before v0.6.0 so they don't reset to the plugin's global default on their
@@ -93,6 +105,8 @@ function writeSupportsToFrontmatter(fm: Record<string, unknown>, supports: Gener
 function readSupportsFromFrontmatter(fm: Record<string, unknown> | undefined): GenerationSupports | undefined {
 	if (!fm) return undefined;
 	if (FM_SPELLCHECK in fm || FM_TRANSLATE in fm || FM_IMAGE in fm || FM_AUDIO in fm) {
+		const a = repairLegacyVoice(fm[FM_AUDIO_VOICE_A] as string | undefined, fm[FM_AUDIO_PROVIDER_A] as string | undefined);
+		const b = repairLegacyVoice(fm[FM_AUDIO_VOICE_B] as string | undefined, fm[FM_AUDIO_PROVIDER_B] as string | undefined);
 		return {
 			spellcheck: !!fm[FM_SPELLCHECK],
 			translate: !!fm[FM_TRANSLATE],
@@ -100,10 +114,10 @@ function readSupportsFromFrontmatter(fm: Record<string, unknown> | undefined): G
 			image_target: fm[FM_IMAGE_TARGET] as GenerationSupports["image_target"],
 			audio: !!fm[FM_AUDIO],
 			audio_target: fm[FM_AUDIO_TARGET] as GenerationSupports["audio_target"],
-			audio_voice_a: fm[FM_AUDIO_VOICE_A] as string | undefined,
-			audio_provider_a: fm[FM_AUDIO_PROVIDER_A] as string | undefined,
-			audio_voice_b: fm[FM_AUDIO_VOICE_B] as string | undefined,
-			audio_provider_b: fm[FM_AUDIO_PROVIDER_B] as string | undefined,
+			audio_voice_a: a.voice,
+			audio_provider_a: a.provider,
+			audio_voice_b: b.voice,
+			audio_provider_b: b.provider,
 		};
 	}
 	return fm[FM_REFINEMENTS_LEGACY] as GenerationSupports | undefined;
