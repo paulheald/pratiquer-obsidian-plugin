@@ -23,7 +23,7 @@ Pratiquer is a high-performance learning platform for language acquisition, medi
 
 ## Install (BRAT)
 
-This plugin isn't in the community plugin directory yet. Install it via [BRAT](https://github.com/TfTHacker/obsidian42-brat) (Beta Reviewers Auto-update Tool):
+This plugin isn't in the community plugin directory yet — BRAT is a temporary install path for the private beta, needed only until Pratiquer (and this plugin along with it) is ready for general release. Install it via [BRAT](https://github.com/TfTHacker/obsidian42-brat) (Beta Reviewers Auto-update Tool):
 
 1. Install the **BRAT** plugin from Obsidian's Community Plugins browser, and enable it.
 2. Open BRAT's settings → **Add Beta Plugin**.
