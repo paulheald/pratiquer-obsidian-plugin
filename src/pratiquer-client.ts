@@ -40,6 +40,11 @@ export interface GenerationSupports {
 export interface BatchItem {
 	side_a_text?: string;
 	side_b_text?: string;
+	/** Shows up in the web app's editor as "Personal Notes & Usage Context"
+	 * (Flashcard.notes) -- already the field example sentences and cultural
+	 * context live in, so a "captured from Obsidian note X" tag belongs here
+	 * rather than a new dedicated column. See main.ts's doSend. */
+	notes?: string;
 }
 
 export interface CardGenerationJob {

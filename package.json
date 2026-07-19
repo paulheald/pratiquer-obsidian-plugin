@@ -1,6 +1,6 @@
 {
 	"name": "pratiquer-obsidian-plugin",
-	"version": "0.6.1",
+	"version": "0.7.0",
 	"description": "Send vocab lists straight from Obsidian into Pratiquer flashcard sets.",
 	"main": "main.js",
 	"scripts": {

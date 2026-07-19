@@ -18,6 +18,7 @@ Pratiquer is a high-performance learning platform for language acquisition, medi
 ## What it sends
 
 - **Network use**: this plugin sends the text of your currently-open note (split one line per flashcard) to the Pratiquer server you configure, along with your API token, whenever you run "Send to Pratiquer." Nothing is sent automatically or in the background — only when you explicitly invoke the command.
+- **Source attribution**: each card also records the note's title (e.g. `Captured from Obsidian note "French Trip Vocab"`) in Pratiquer's Notes/Usage Context field, so you can see where a word came from later — no extra vault content beyond the note's own filename, which was already being sent.
 - **Requires a Pratiquer account** and an API token generated from Settings → API Access on the Pratiquer web app.
 - **No other vault content** is read or transmitted — only the active note at the moment you run the command.
 

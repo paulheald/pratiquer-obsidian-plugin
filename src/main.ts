@@ -401,8 +401,18 @@ export default class PratiquerPlugin extends Plugin {
 		supports: GenerationSupports,
 		listSide: "a" | "b"
 	): Promise<void> {
+		// Source attribution: which note a card came from, same field the web
+		// app already labels "Personal Notes & Usage Context" and shows right
+		// on the card in the editor -- costs nothing extra to send (the note
+		// is already being read/transmitted for its line content) and gives
+		// every card a "where did I meet this word" hook, the same value an
+		// e-reader's book title/author would eventually add. See
+		// obsidian-plugin-plan.md's #2.
+		const sourceNote = `Captured from Obsidian note "${file.basename}"`;
 		const items: BatchItem[] = linesToSend.map((line) =>
-			listSide === "b" ? { side_b_text: line } : { side_a_text: line }
+			listSide === "b"
+				? { side_b_text: line, notes: sourceNote }
+				: { side_a_text: line, notes: sourceNote }
 		);
 		let batchId: string;
 		try {
