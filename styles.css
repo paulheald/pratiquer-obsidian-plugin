@@ -6,3 +6,98 @@
 	color: var(--text-faint);
 	margin-left: 4px;
 }
+
+/* "+ Create new set" row always sits first in the picker (see
+   set-picker-modal.ts's getItems) -- accent-colored so it visually reads as
+   an action distinct from the flashcard sets listed below it. */
+.pratiquer-create-new-item {
+	color: var(--text-accent);
+	font-weight: 600;
+}
+
+/* RefinementModal: give the settings list some breathing room instead of
+   Obsidian's default edge-to-edge modal, and cap width so long dropdown
+   rows don't stretch awkwardly on wide desktop windows. */
+.pratiquer-modal {
+	padding: 4px 4px 0;
+	max-width: 480px;
+}
+
+/* Icon + title row used at the top of CreateSetModal and RefinementModal so
+   both share the same visual language instead of a bare <h2>. */
+.pratiquer-modal-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 4px;
+}
+
+.pratiquer-modal-header h2 {
+	margin: 0;
+}
+
+.pratiquer-modal-header-icon {
+	display: flex;
+	align-items: center;
+	color: var(--text-accent);
+}
+
+/* Small caps label above a value, used to group related Setting rows (e.g.
+   "Content" vs "Media") so the refinement picker doesn't read as one
+   undifferentiated wall of toggles. */
+.pratiquer-section-header {
+	font-size: 0.75em;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--text-muted);
+	margin: 20px 0 4px;
+}
+
+/* Destination card at the top of RefinementModal -- shows which flashcard
+   set this send is going to, with a "Change..." escape hatch so retargeting
+   a note never requires hand-editing its pratiquer-set-id frontmatter. */
+.pratiquer-dest-card {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 14px;
+	margin-bottom: 8px;
+	border-radius: 8px;
+	background: var(--background-secondary);
+	border: 1px solid var(--background-modifier-border);
+}
+
+.pratiquer-dest-icon {
+	display: flex;
+	align-items: center;
+	color: var(--text-accent);
+	flex-shrink: 0;
+}
+
+.pratiquer-dest-info {
+	flex: 1;
+	min-width: 0;
+}
+
+.pratiquer-dest-label {
+	font-size: 0.7em;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--text-muted);
+}
+
+.pratiquer-dest-name {
+	font-weight: 600;
+	font-size: 1.05em;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--text-normal);
+}
+
+.pratiquer-dest-change {
+	flex-shrink: 0;
+	font-size: 0.85em;
+}

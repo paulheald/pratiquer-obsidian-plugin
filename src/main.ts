@@ -53,6 +53,12 @@ export default class PratiquerPlugin extends Plugin {
 			callback: () => this.sendToPratiquer(),
 		});
 
+		this.addCommand({
+			id: "change-pratiquer-destination",
+			name: "Change destination flashcard set",
+			callback: () => this.changeDestinationCommand(),
+		});
+
 		this.addRibbonIcon("send", "Send to Pratiquer", () => this.sendToPratiquer());
 	}
 
@@ -147,12 +153,62 @@ export default class PratiquerPlugin extends Plugin {
 			return;
 		}
 
-		// Only fetched when the picker is actually going to be shown (a sticky
-		// note-frontmatter target skips it entirely, above) -- no point paying
-		// for the extra round trip otherwise. A failure here (e.g. the
-		// OBSIDIAN_INTEGRATION_ENABLED flag being off) degrades to an empty
-		// list rather than blocking the send, since recentSets() itself never
-		// throws -- see PratiquerClient.recentSets().
+		await this.pickDestinationAndSend(file, client, allLines);
+	}
+
+	/** Standalone entry point for retargeting a note that's already sticky to
+	 * a set, without needing new lines to send -- sendToPratiquer's sticky
+	 * path bails early with "Nothing new to send" in that case, which would
+	 * otherwise make the destination unreachable from the picker/RefinementModal
+	 * flow entirely. Always does a full resend of every line in the note
+	 * against the newly chosen set, same as picking a destination for a note
+	 * that's never been sent before -- none of those lines have reached the
+	 * new set yet, however many already went to the old one. */
+	private async changeDestinationCommand(): Promise<void> {
+		const file = this.app.workspace.getActiveFile();
+		if (!file) {
+			new Notice("No active note.");
+			return;
+		}
+
+		const rawContent = await this.app.vault.cachedRead(file);
+		const allLines = splitLines(this.stripFrontmatter(rawContent, file));
+		if (allLines.length === 0) {
+			new Notice("This note has no lines to send.");
+			return;
+		}
+
+		let client: PratiquerClient;
+		try {
+			client = this.getClient();
+		} catch (e) {
+			new Notice(e instanceof Error ? e.message : String(e));
+			return;
+		}
+
+		await this.pickDestinationAndSend(file, client, allLines);
+	}
+
+	/** Shared by the first-ever send for a note and by explicit
+	 * "change destination" (both the command and RefinementModal's "Change"
+	 * button) -- always offers the full set list + recently-used shortcut,
+	 * and always resends every line in `allLines`, since a newly (re)chosen
+	 * destination has none of them yet. */
+	private async pickDestinationAndSend(
+		file: TFile,
+		client: PratiquerClient,
+		allLines: string[]
+	): Promise<void> {
+		let sets: FlashcardSet[];
+		try {
+			sets = await client.listSets();
+		} catch (e) {
+			new Notice(`Couldn't reach Pratiquer: ${e instanceof Error ? e.message : e}`, 8000);
+			return;
+		}
+		// A failure here (e.g. the OBSIDIAN_INTEGRATION_ENABLED flag being off)
+		// degrades to an empty list rather than blocking the send, since
+		// recentSets() itself never throws -- see PratiquerClient.recentSets().
 		const recentSets = await client.recentSets();
 
 		new SetPickerModal(this.app, sets, recentSets, async (result) => {
@@ -203,12 +259,24 @@ export default class PratiquerPlugin extends Plugin {
 		forceListSide: "a" | "b" | null
 	): Promise<void> {
 		const defaults = this.resolveDefaultSupports(file);
-		new RefinementModal(this.app, targetSet, defaults, client, forceListSide, async (supports, listSide) => {
-			this.settings.lastUsedSupports = supports;
-			await this.saveSettings();
+		new RefinementModal(
+			this.app,
+			targetSet,
+			defaults,
+			client,
+			forceListSide,
+			async (supports, listSide) => {
+				this.settings.lastUsedSupports = supports;
+				await this.saveSettings();
 
-			await this.doSend(file, client, targetSet, allLines, linesToSend, supports, listSide);
-		}).open();
+				await this.doSend(file, client, targetSet, allLines, linesToSend, supports, listSide);
+			},
+			// Re-picking a destination always means a full resend against
+			// whatever's newly chosen -- linesToSend (which may be a
+			// sticky-set's trailing-offset slice) doesn't apply once the
+			// target itself has changed.
+			() => this.pickDestinationAndSend(file, client, allLines)
+		).open();
 	}
 
 	private async doSend(

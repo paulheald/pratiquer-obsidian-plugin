@@ -42,7 +42,11 @@ export class SetPickerModal extends FuzzySuggestModal<PickerItem> {
 
 	renderSuggestion(match: FuzzyMatch<PickerItem>, el: HTMLElement): void {
 		super.renderSuggestion(match, el);
-		if (match.item.id !== CREATE_NEW_SENTINEL && this.recentIds.has(match.item.id as number)) {
+		if (match.item.id === CREATE_NEW_SENTINEL) {
+			el.addClass("pratiquer-create-new-item");
+			return;
+		}
+		if (this.recentIds.has(match.item.id as number)) {
 			el.createSpan({ text: " recently used", cls: "pratiquer-recent-tag" });
 		}
 	}

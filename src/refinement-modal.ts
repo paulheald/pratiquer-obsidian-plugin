@@ -1,4 +1,4 @@
-import { App, Modal, Notice, Setting } from "obsidian";
+import { App, Modal, Notice, Setting, setIcon } from "obsidian";
 import { FlashcardSet, GenerationSupports, PratiquerClient, TtsVoice } from "./pratiquer-client";
 import { SUPPORTED_LANGUAGES } from "./settings";
 
@@ -34,7 +34,12 @@ export class RefinementModal extends Modal {
 		 * language is on (e.g. a set just created from this same note) --
 		 * skips showing the "My list is in" picker below. */
 		private forceListSide: "a" | "b" | null,
-		private onSubmit: (supports: GenerationSupports, listSide: "a" | "b") => void
+		private onSubmit: (supports: GenerationSupports, listSide: "a" | "b") => void,
+		/** Closes this modal and hands control back to main.ts's destination
+		 * picker -- lets the user redirect a note to a different (or brand
+		 * new) set right from the send confirmation, instead of having to
+		 * hand-edit the note's `pratiquer-set-id` frontmatter to do it. */
+		private onChangeDestination: () => void
 	) {
 		super(app);
 		// Shallow copy -- never mutate the caller's default object in place.
@@ -63,10 +68,36 @@ export class RefinementModal extends Modal {
 		}
 	}
 
+	/** Small labelled section header, purely visual grouping so the settings
+	 * list below doesn't read as one undifferentiated wall of rows. */
+	private sectionHeader(parent: HTMLElement, text: string): void {
+		parent.createEl("div", { text, cls: "pratiquer-section-header" });
+	}
+
 	private render(): void {
 		const { contentEl } = this;
 		contentEl.empty();
-		contentEl.createEl("h2", { text: `Send to "${this.targetSet.name}"` });
+		contentEl.addClass("pratiquer-modal");
+		const header = contentEl.createDiv({ cls: "pratiquer-modal-header" });
+		setIcon(header.createDiv({ cls: "pratiquer-modal-header-icon" }), "send");
+		header.createEl("h2", { text: "Send to Pratiquer" });
+
+		const destCard = contentEl.createDiv({ cls: "pratiquer-dest-card" });
+		const destIcon = destCard.createDiv({ cls: "pratiquer-dest-icon" });
+		setIcon(destIcon, "layers");
+		const destInfo = destCard.createDiv({ cls: "pratiquer-dest-info" });
+		destInfo.createDiv({ text: "Destination", cls: "pratiquer-dest-label" });
+		destInfo.createDiv({ text: this.targetSet.name, cls: "pratiquer-dest-name" });
+		const changeBtn = destCard.createEl("button", {
+			text: "Change...",
+			cls: "pratiquer-dest-change",
+		});
+		changeBtn.addEventListener("click", () => {
+			this.close();
+			this.onChangeDestination();
+		});
+
+		this.sectionHeader(contentEl, "Content");
 
 		// Only asked for an existing set (forceListSide is null) with a real
 		// language pair -- this set's source_lang/target_lang were fixed when
@@ -104,6 +135,8 @@ export class RefinementModal extends Modal {
 			.addToggle((tg) =>
 				tg.setValue(!!this.supports.translate).onChange((v) => (this.supports.translate = v))
 			);
+
+		this.sectionHeader(contentEl, "Media");
 
 		new Setting(contentEl).setName("Image").addDropdown((dd) =>
 			dd

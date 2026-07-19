@@ -1,4 +1,4 @@
-import { App, Modal, Setting } from "obsidian";
+import { App, Modal, Setting, setIcon } from "obsidian";
 import { SUPPORTED_LANGUAGES } from "./settings";
 
 export interface NewSetInput {
@@ -34,7 +34,12 @@ export class CreateSetModal extends Modal {
 
 	onOpen(): void {
 		const { contentEl } = this;
-		contentEl.createEl("h2", { text: "Create a new flashcard set" });
+		contentEl.addClass("pratiquer-modal");
+
+		const header = contentEl.createDiv({ cls: "pratiquer-modal-header" });
+		const icon = header.createDiv({ cls: "pratiquer-modal-header-icon" });
+		setIcon(icon, "plus-circle");
+		header.createEl("h2", { text: "Create a new flashcard set" });
 
 		new Setting(contentEl).setName("Set name").addText((text) =>
 			text.setPlaceholder("e.g. French Vocab").onChange((value) => {
