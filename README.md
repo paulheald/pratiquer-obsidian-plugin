@@ -17,7 +17,7 @@ Pratiquer is a high-performance learning platform for language acquisition, medi
 
 ## What it sends
 
-- **Network use**: this plugin sends the text of your currently-open note (split one line per flashcard) to the Pratiquer server you configure, along with your API token, whenever you run "Send to Pratiquer." Nothing is sent automatically or in the background — only when you explicitly invoke the command.
+- **Network use**: this plugin sends note text to the Pratiquer server you configure, along with your API token, whenever you explicitly run one of its commands -- either the whole currently-open note (split one line per flashcard) via "Send to Pratiquer," or just your current selection plus its surrounding paragraph via "Send selection to Pratiquer." Nothing is sent automatically or in the background — only when you explicitly invoke a command.
 - **Source attribution**: each card also records the note's title (e.g. `Captured from Obsidian note "French Trip Vocab"`) in Pratiquer's Notes/Usage Context field, so you can see where a word came from later — no extra vault content beyond the note's own filename, which was already being sent.
 - **Requires a Pratiquer account** and an API token generated from Settings → API Access on the Pratiquer web app.
 - **No other vault content** is read or transmitted — only the active note at the moment you run the command.
@@ -54,6 +54,14 @@ Il a couru pour ==attraper== le bus.
 ```
 
 That line becomes one card for **attraper**, with the whole sentence saved as its usage context — visible in Pratiquer's editor under "Personal Notes & Usage Context." A line with more than one highlighted word makes one card per word, all sharing that sentence as context.
+
+### Sending just one word
+
+The commands above are all about a whole running list. Sometimes you just want to look one word up while you're reading -- select it and run **Send selection to Pratiquer** (command palette only, no ribbon icon) instead of adding a line to the note at all.
+
+Select a word or phrase in the editor, then run the command. That selection becomes the card, and the paragraph it's sitting in is captured as context automatically -- no `==highlight==` markup needed, since there's no batch of lines to distinguish it from. If the selection is basically a whole paragraph on its own (or a word alone with nothing else around it), no redundant context note is added.
+
+This works whether or not the note is already bound to a set: if it already has a `pratiquer-set-id` (from a previous **Send to Pratiquer** or selection-send), the card goes straight there, same as a running-list resend. If not, you'll get the usual destination picker. Either way you still get the same refinement confirmation dialog before anything is sent. A selection-send binds the note's `pratiquer-set-id`/`pratiquer-list-side` the same way a whole-note send does, but deliberately leaves `pratiquer-synced-line-count` untouched -- it's a one-off single capture, not part of the running list's line count, so it can't affect which lines **Send to Pratiquer** considers already-sent.
 
 ### Changing where a note is headed
 

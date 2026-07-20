@@ -177,6 +177,37 @@ function splitLines(text: string): string[] {
 		.filter(Boolean);
 }
 
+/** Same blank-line-delimited "paragraph" concept Markdown itself uses.
+ * Finds the paragraph containing [offsetStart, offsetEnd) inside `fullText`
+ * and returns its raw (untrimmed) text -- used by sendSelectionToPratiquer
+ * to auto-capture context around a plain editor selection, the no-markup
+ * counterpart to parseLine's ==highlight== sentence capture above.
+ *
+ * Builds a flat [start0, end0, start1, end1, ...] boundary list by treating
+ * every blank-line run as a separator: the text starts as an implicit
+ * paragraph start (0), each separator match contributes its own start
+ * (previous paragraph's end) and end (next paragraph's start), and the full
+ * text length closes out the last paragraph -- so consecutive pairs in the
+ * resulting array are exactly each paragraph's [start, end) range. */
+function extractParagraph(fullText: string, offsetStart: number, offsetEnd: number): string {
+	const separator = /\n[ \t]*\n+/g;
+	const boundaries: number[] = [0];
+	let m: RegExpExecArray | null;
+	while ((m = separator.exec(fullText))) {
+		boundaries.push(m.index, m.index + m[0].length);
+	}
+	boundaries.push(fullText.length);
+
+	for (let i = 0; i < boundaries.length - 1; i += 2) {
+		const start = boundaries[i];
+		const end = boundaries[i + 1];
+		if (offsetStart >= start && offsetStart <= end) {
+			return fullText.slice(start, end);
+		}
+	}
+	return fullText.slice(offsetStart, offsetEnd);
+}
+
 interface ParsedLineItem {
 	text: string;
 	/** The line's sentence with `==...==` markup stripped, when the
@@ -231,6 +262,12 @@ export default class PratiquerPlugin extends Plugin {
 			id: "change-pratiquer-destination",
 			name: "Change destination flashcard set",
 			callback: () => this.changeDestinationCommand(),
+		});
+
+		this.addCommand({
+			id: "send-selection-to-pratiquer",
+			name: "Send selection to Pratiquer",
+			callback: () => this.sendSelectionToPratiquer(),
 		});
 
 		this.addRibbonIcon("send", "Send to Pratiquer", () => this.sendToPratiquer());
@@ -409,6 +446,134 @@ export default class PratiquerPlugin extends Plugin {
 		}).open();
 	}
 
+	/** "Send selection to Pratiquer": a different capture mode from
+	 * sendToPratiquer's whole-note batch send -- selects just a word/phrase
+	 * in the editor (a real text selection, no ==markup== needed) and sends
+	 * only that as one card, with its surrounding paragraph auto-captured as
+	 * context. One quick capture, not a running list. Deliberately its own
+	 * doSendSingle rather than a synthetic one-line allLines array through
+	 * doSend -- doSend writes FM_SYNCED_COUNT = allLines.length, which the
+	 * whole-note flow depends on to know how many of *its* lines have
+	 * already been sent; a single-line allLines here would wrongly reset
+	 * that count to 1 and cause every already-sent line in the note's real
+	 * running list to be re-sent as duplicates the next time
+	 * sendToPratiquer runs. */
+	private async sendSelectionToPratiquer(): Promise<void> {
+		const activeEditor = this.app.workspace.activeEditor;
+		const editor = activeEditor?.editor;
+		const file = activeEditor?.file;
+		const term = editor?.getSelection().trim() ?? "";
+		if (!editor || !file || !term) {
+			new Notice("Select some text first.");
+			return;
+		}
+
+		const fullText = editor.getValue();
+		const fromOffset = editor.posToOffset(editor.getCursor("from"));
+		const toOffset = editor.posToOffset(editor.getCursor("to"));
+		const paragraph = extractParagraph(fullText, fromOffset, toOffset);
+		const collapsedParagraph = paragraph.trim().replace(/\s+/g, " ");
+		// Skip the context note when the paragraph *is* just the selection
+		// (a word alone on its own line) -- same redundancy check as
+		// parseLine's ==highlight== sentence-vs-word comparison above.
+		const context = collapsedParagraph.toLowerCase() === term.toLowerCase() ? undefined : collapsedParagraph;
+		const sampleLines = context ? splitLines(paragraph) : [term];
+
+		let client: PratiquerClient;
+		try {
+			client = this.getClient();
+		} catch (e) {
+			new Notice(e instanceof Error ? e.message : String(e));
+			return;
+		}
+
+		let sets: FlashcardSet[];
+		try {
+			sets = await client.listSets();
+		} catch (e) {
+			new Notice(`Couldn't reach Pratiquer: ${e instanceof Error ? e.message : e}`, 8000);
+			return;
+		}
+
+		// Same sticky-set check as sendToPratiquer's dedup path, minus the
+		// line-count bookkeeping -- a selection-send only needs to know
+		// *where* to send, not how many lines have already gone out.
+		const cache = this.app.metadataCache.getFileCache(file);
+		const stickySetId = cache?.frontmatter?.[FM_SET_ID] as number | undefined;
+		const stickySet = stickySetId !== undefined ? sets.find((s) => s.id === stickySetId) : undefined;
+
+		if (stickySet) {
+			await this.chooseRefinementsAndSendSingle(file, client, stickySet, term, context, sampleLines, null);
+			return;
+		}
+
+		await this.pickDestinationAndSendSingle(file, client, term, context, sampleLines);
+	}
+
+	/** Single-item counterpart to pickDestinationAndSend -- same picker flow,
+	 * but always ends in doSendSingle instead of doSend. */
+	private async pickDestinationAndSendSingle(
+		file: TFile,
+		client: PratiquerClient,
+		term: string,
+		context: string | undefined,
+		sampleLines: string[]
+	): Promise<void> {
+		let sets: FlashcardSet[];
+		try {
+			sets = await client.listSets();
+		} catch (e) {
+			new Notice(`Couldn't reach Pratiquer: ${e instanceof Error ? e.message : e}`, 8000);
+			return;
+		}
+		const recentSets = await client.recentSets();
+
+		new SetPickerModal(this.app, sets, recentSets, async (result) => {
+			if (result.createNew) {
+				new CreateSetModal(this.app, client, async (input) => {
+					try {
+						const created = await client.createSet(input.name, input.listLang, input.knownLang, input.subject);
+						// Freshly created with source_lang = this selection's own
+						// language, so side A is guaranteed correct -- no need to
+						// ask again (mirrors pickDestinationAndSend's own create path).
+						await this.chooseRefinementsAndSendSingle(file, client, created, term, context, sampleLines, "a");
+					} catch (e) {
+						new Notice(`Failed to create set: ${e instanceof Error ? e.message : e}`, 8000);
+					}
+				}, sampleLines).open();
+			} else {
+				await this.chooseRefinementsAndSendSingle(file, client, result.set, term, context, sampleLines, null);
+			}
+		}).open();
+	}
+
+	/** Single-item counterpart to chooseRefinementsAndSend. */
+	private async chooseRefinementsAndSendSingle(
+		file: TFile,
+		client: PratiquerClient,
+		targetSet: FlashcardSet,
+		term: string,
+		context: string | undefined,
+		sampleLines: string[],
+		forceListSide: "a" | "b" | null
+	): Promise<void> {
+		const defaults = this.resolveDefaultSupports(file);
+		new RefinementModal(
+			this.app,
+			targetSet,
+			defaults,
+			client,
+			forceListSide,
+			async (supports, listSide) => {
+				this.settings.lastUsedSupports = supports;
+				await this.saveSettings();
+
+				await this.doSendSingle(file, client, targetSet, term, context, supports, listSide);
+			},
+			() => this.pickDestinationAndSendSingle(file, client, term, context, sampleLines)
+		).open();
+	}
+
 	/** Per-file default resolution (2026-07-17 revision of Open Question 1):
 	 * a note's own refinement frontmatter wins if present; falls back to the
 	 * plugin's global last-used setting when the note has none yet. */
@@ -505,6 +670,53 @@ export default class PratiquerPlugin extends Plugin {
 		// the two counts can now genuinely differ.
 		new Notice(`Sending ${items.length} card(s) to "${targetSet.name}"...`);
 		await this.pollUntilDone(client, targetSet, batchId, items.length);
+	}
+
+	/** Single-item counterpart to doSend, for sendSelectionToPratiquer.
+	 * Deliberately does NOT reuse doSend with a synthetic one-line allLines --
+	 * doSend writes FM_SYNCED_COUNT = allLines.length, which sendToPratiquer's
+	 * whole-note resend path relies on as a running count of that note's
+	 * already-sent lines. A single, independent selection-capture must never
+	 * read or write that key: only FM_SET_ID and FM_LIST_SIDE are written
+	 * here, the same "bind this note to a set" bookkeeping doSend also does,
+	 * so a follow-up selection-send from the same note skips the destination
+	 * picker too. Per-file refinement defaults (writeSupportsToFrontmatter)
+	 * are deliberately left untouched here -- this is a quick one-off capture,
+	 * not the note's main running list, so it shouldn't redefine that list's
+	 * per-file refinement defaults; the plugin-wide lastUsedSupports default
+	 * (set by the caller above) still picks up the choice. */
+	private async doSendSingle(
+		file: TFile,
+		client: PratiquerClient,
+		targetSet: FlashcardSet,
+		term: string,
+		context: string | undefined,
+		supports: GenerationSupports,
+		listSide: "a" | "b"
+	): Promise<void> {
+		// Same notes shape as doSend: context (if any) leads, then a blank
+		// line, then the same source-attribution line -- describing the same
+		// product concept, just triggered by a selection instead of a line.
+		const sourceNote = `Captured from Obsidian note "${file.basename}"`;
+		const notes = context ? `${context}\n\n${sourceNote}` : sourceNote;
+		const item: BatchItem = listSide === "b" ? { side_b_text: term, notes } : { side_a_text: term, notes };
+
+		let batchId: string;
+		try {
+			const result = await client.submitBatch(targetSet.id, [item], supports);
+			batchId = result.batch_id;
+		} catch (e) {
+			new Notice(`Send failed: ${e instanceof Error ? e.message : e}`, 8000);
+			return;
+		}
+
+		await this.app.fileManager.processFrontMatter(file, (fm) => {
+			fm[FM_SET_ID] = targetSet.id;
+			fm[FM_LIST_SIDE] = formatListSide(listSide, targetSet);
+		});
+
+		new Notice(`Sending 1 card to "${targetSet.name}"...`);
+		await this.pollUntilDone(client, targetSet, batchId, 1);
 	}
 
 	/** Phase 7: plain polling, not the web app's WebSocket channel --
