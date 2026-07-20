@@ -399,7 +399,7 @@ export default class PratiquerPlugin extends Plugin {
 					} catch (e) {
 						new Notice(`Failed to create set: ${e instanceof Error ? e.message : e}`, 8000);
 					}
-				}).open();
+				}, allLines).open();
 			} else {
 				// An existing set's source_lang/target_lang were fixed whenever it
 				// was first created and may not match which language *this* note's

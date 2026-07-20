@@ -1,6 +1,7 @@
 import { App, Modal, Setting, setIcon } from "obsidian";
 import { SUPPORTED_LANGUAGES } from "./settings";
 import { PratiquerClient, SubjectOption } from "./pratiquer-client";
+import { detectLanguage } from "./lang-detect";
 
 export interface NewSetInput {
 	name: string;
@@ -38,9 +39,29 @@ export class CreateSetModal extends Modal {
 	private knownLang = "en";
 	private subject = FALLBACK_SUBJECTS[0].value;
 	private subjectOptions: SubjectOption[] = FALLBACK_SUBJECTS;
+	private detectedLang: string | null = null;
 
-	constructor(app: App, private client: PratiquerClient, private onSubmit: (input: NewSetInput) => void) {
+	constructor(
+		app: App,
+		private client: PratiquerClient,
+		private onSubmit: (input: NewSetInput) => void,
+		/** The note's own lines, used only to guess `listLang` -- never asked
+		 * for beyond that, and always just a pre-selected default the user can
+		 * still freely change. See lang-detect.ts's docstring for why this is
+		 * a small hand-rolled heuristic rather than a real language-ID library. */
+		sampleLines: string[] = []
+	) {
 		super(app);
+		this.detectedLang = detectLanguage(sampleLines);
+		if (this.detectedLang) {
+			this.listLang = this.detectedLang;
+			// Avoid a nonsensical "My list is in French / I already know French"
+			// default when the detected language happens to match the other
+			// dropdown's own hardcoded default.
+			if (this.knownLang === this.detectedLang) {
+				this.knownLang = this.detectedLang === "en" ? "fr" : "en";
+			}
+		}
 	}
 
 	onOpen(): void {
@@ -80,7 +101,11 @@ export class CreateSetModal extends Modal {
 
 		new Setting(contentEl)
 			.setName("My list is in")
-			.setDesc("The language the words in this note are actually written in.")
+			.setDesc(
+				this.detectedLang
+					? "Auto-detected from your note -- change it if this guessed wrong."
+					: "The language the words in this note are actually written in."
+			)
 			.addDropdown((dd) => {
 				for (const lang of SUPPORTED_LANGUAGES) dd.addOption(lang.code, lang.label);
 				dd.setValue(this.listLang).onChange((value) => (this.listLang = value));
