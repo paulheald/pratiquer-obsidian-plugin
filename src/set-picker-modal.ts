@@ -24,16 +24,23 @@ export class SetPickerModal extends FuzzySuggestModal<PickerItem> {
 		app: App,
 		private sets: FlashcardSet[],
 		private recentSets: FlashcardSet[],
-		private onChoose: (result: { createNew: true } | { createNew: false; set: FlashcardSet }) => void
+		private onChoose: (result: { createNew: true } | { createNew: false; set: FlashcardSet }) => void,
+		/** False for pickers where "create new" makes no sense -- e.g.
+		 * reviewing due cards, since a brand-new set has nothing due yet. */
+		private allowCreateNew: boolean = true
 	) {
 		super(app);
-		this.setPlaceholder("Choose a flashcard set, or create a new one...");
+		this.setPlaceholder(
+			allowCreateNew ? "Choose a flashcard set, or create a new one..." : "Choose a flashcard set..."
+		);
 		this.recentIds = new Set(recentSets.map((s) => s.id));
 	}
 
 	getItems(): PickerItem[] {
 		const rest = this.sets.filter((s) => !this.recentIds.has(s.id));
-		return [{ id: CREATE_NEW_SENTINEL, name: "+ Create new set" }, ...this.recentSets, ...rest];
+		const items: PickerItem[] = [...this.recentSets, ...rest];
+		if (this.allowCreateNew) items.unshift({ id: CREATE_NEW_SENTINEL, name: "+ Create new set" });
+		return items;
 	}
 
 	getItemText(item: PickerItem): string {

@@ -63,6 +63,14 @@ Select a word or phrase in the editor, then run the command. That selection beco
 
 This works whether or not the note is already bound to a set: if it already has a `pratiquer-set-id` (from a previous **Send to Pratiquer** or selection-send), the card goes straight there, same as a running-list resend. If not, you'll get the usual destination picker. Either way you still get the same refinement confirmation dialog before anything is sent. A selection-send binds the note's `pratiquer-set-id`/`pratiquer-list-side` the same way a whole-note send does, but deliberately leaves `pratiquer-synced-line-count` untouched -- it's a one-off single capture, not part of the running list's line count, so it can't affect which lines **Send to Pratiquer** considers already-sent.
 
+### Reviewing due cards
+
+Capturing words is only half the loop -- run **Review due cards** from the command palette to actually study them, right in Obsidian. It's not tied to any note (studying isn't a note-writing action), so it always opens a picker asking which flashcard set to review.
+
+Each due card shows its front, a **Show Answer** button, then the back plus the same four grading buttons Pratiquer's own review screen uses (Again / Hard / Good / Easy) -- grading immediately loads the next due card, closing the session once you're through the queue. Cards with images or audio show them inline. A card type this simple quiz view can't render yet (hotspot images, cloze deletions) is skipped with a note telling you how many -- review those in the web app.
+
+This only works for sets you own -- Pratiquer's API deliberately doesn't allow scripting a review of someone else's assigned/shared content (e.g. a course you're a student in), even though the web app's own review screen legitimately can. If a set doesn't show up, or reviewing it fails with a permissions error, that's why.
+
 ### Changing where a note is headed
 
 Every send shows a **Destination** card naming the flashcard set it's about to add cards to, with a **Change...** button — pick a different existing set or create a new one right there, no need to hand-edit the note's frontmatter. If a note is already bound to a set but you have nothing new to send right now, run **Change destination flashcard set** from the command palette to retarget it directly.

@@ -110,3 +110,87 @@
 	color: var(--text-muted);
 	padding: 4px 0 8px;
 }
+
+/* ReviewModal: "Card N of M" progress line under the header. */
+.pratiquer-review-progress {
+	font-size: 0.8em;
+	color: var(--text-muted);
+	margin-bottom: 12px;
+}
+
+/* ReviewModal: front/back content block -- text, then optional image/audio
+   stacked beneath it, same order on both sides of the card. */
+.pratiquer-review-side {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px 0;
+}
+
+.pratiquer-review-text {
+	font-size: 1.3em;
+	line-height: 1.4;
+}
+
+.pratiquer-review-image {
+	max-width: 100%;
+	max-height: 220px;
+	object-fit: contain;
+	border-radius: 6px;
+}
+
+.pratiquer-review-audio {
+	width: 100%;
+}
+
+/* ReviewModal: full-width "Show Answer" button between the front side and
+   the (still-hidden) back -- deliberately the only control on screen at
+   that point, so there's no way to accidentally grade before revealing. */
+.pratiquer-review-reveal {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	width: 100%;
+	padding: 10px;
+	margin-top: 8px;
+	font-weight: 600;
+	color: var(--text-on-accent);
+	background: var(--interactive-accent);
+	border: none;
+	border-radius: 6px;
+	cursor: pointer;
+}
+
+.pratiquer-review-reveal:hover {
+	background: var(--interactive-accent-hover);
+}
+
+/* ReviewModal: the 4 FSRS grade buttons, same Again/Hard/Good/Easy scale
+   the web app's own review screen uses -- distinct colors so the row reads
+   at a glance without having to read each label. */
+.pratiquer-grade-row {
+	display: flex;
+	gap: 8px;
+	margin-top: 12px;
+}
+
+.pratiquer-grade-btn {
+	flex: 1;
+	padding: 10px 4px;
+	border: none;
+	border-radius: 6px;
+	font-weight: 600;
+	color: #fff;
+	cursor: pointer;
+}
+
+.pratiquer-grade-btn:disabled {
+	opacity: 0.6;
+	cursor: default;
+}
+
+.pratiquer-grade-again { background: #d32f2f; }
+.pratiquer-grade-hard { background: #f9a825; }
+.pratiquer-grade-good { background: #1976d2; }
+.pratiquer-grade-easy { background: #388e3c; }

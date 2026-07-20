@@ -67,6 +67,34 @@ export interface SubjectOption {
 	icon?: string;
 }
 
+/** One side of a due card, as returned by GET /sets/{id}/flashcards --
+ * image_url/audio_url are already presigned, ready-to-fetch URLs (see
+ * Flashcard.to_dict() in flashcard.py), not raw S3 keys needing a separate
+ * authenticated request -- safe to drop straight into <img>/<audio src>. */
+export interface DueCardSide {
+	text: string;
+	image_url: string | null;
+	audio_url: string | null;
+	primary_type: string;
+}
+
+/** A card due for review, as returned by GET /sets/{id}/flashcards?due_only=true.
+ * Only the fields ReviewModal actually renders -- the real response also
+ * carries FSRS progress fields (stability, due_date, ...) this client
+ * doesn't need, since due-ordering already happened server-side. */
+export interface DueCard {
+	id: number;
+	is_header: boolean;
+	side_a: DueCardSide;
+	side_b: DueCardSide;
+	cloze_options: unknown[];
+}
+
+/** FSRS's own 4-button scale: 1=Again, 2=Hard, 3=Good, 4=Easy -- same
+ * mapping the web app's review screen and the backend's review_flashcard
+ * endpoint both use. */
+export type ReviewRating = 1 | 2 | 3 | 4;
+
 export class PratiquerApiError extends Error {
 	constructor(public status: number, message: string) {
 		super(message);
@@ -198,5 +226,23 @@ export class PratiquerClient {
 			`/flashcards/audio/voices?lang=${encodeURIComponent(lang)}`
 		);
 		return res.voices;
+	}
+
+	/** Cards due for review right now, in the server's own FSRS-priority
+	 * order -- no client-side re-sorting needed. Requires the backend's
+	 * 2026-07-20 PAT-review-access gate: this only ever succeeds for a set
+	 * the caller actually owns, and never for a STUDENT-role account (see
+	 * PermissionService.check_pat_review_restricted) -- a 403 here surfaces
+	 * that reason directly via PratiquerApiError.message. */
+	async getDueCards(setId: number): Promise<DueCard[]> {
+		return this.request<DueCard[]>("GET", `/sets/${setId}/flashcards?due_only=true`);
+	}
+
+	/** Grades one review -- same endpoint/payload shape as the web app's own
+	 * review screen. durationMs is how long this card was shown before
+	 * grading, purely for the account's own study-time stats; 0 is fine if
+	 * unknown. */
+	async submitReview(cardId: number, rating: ReviewRating, durationMs: number): Promise<void> {
+		await this.request("POST", `/flashcards/${cardId}/review`, { rating, duration_ms: durationMs });
 	}
 }

@@ -15,6 +15,7 @@ import {
 import { SetPickerModal } from "./set-picker-modal";
 import { CreateSetModal } from "./create-set-modal";
 import { RefinementModal } from "./refinement-modal";
+import { ReviewModal, isReviewable } from "./review-modal";
 import { langLabel } from "./lang-utils";
 
 // needs_review is terminal for polling purposes -- the job won't change
@@ -268,6 +269,12 @@ export default class PratiquerPlugin extends Plugin {
 			id: "send-selection-to-pratiquer",
 			name: "Send selection to Pratiquer",
 			callback: () => this.sendSelectionToPratiquer(),
+		});
+
+		this.addCommand({
+			id: "review-due-cards",
+			name: "Review due cards",
+			callback: () => this.reviewDueCards(),
 		});
 
 		this.addRibbonIcon("send", "Send to Pratiquer", () => this.sendToPratiquer());
@@ -765,5 +772,69 @@ export default class PratiquerPlugin extends Plugin {
 
 			await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
 		}
+	}
+
+	/** Roadmap idea #3: study inside Obsidian, not just capture into it. Not
+	 * tied to the active note at all (studying isn't a note-writing action),
+	 * so unlike every other command here this always shows the full set
+	 * picker rather than trying to infer a destination from frontmatter --
+	 * "create new set" is hidden (SetPickerModal's 4th arg), since a
+	 * brand-new set has nothing due yet. */
+	private async reviewDueCards(): Promise<void> {
+		let client: PratiquerClient;
+		try {
+			client = this.getClient();
+		} catch (e) {
+			new Notice(e instanceof Error ? e.message : String(e));
+			return;
+		}
+
+		let sets: FlashcardSet[];
+		try {
+			sets = await client.listSets();
+		} catch (e) {
+			new Notice(`Couldn't reach Pratiquer: ${e instanceof Error ? e.message : e}`, 8000);
+			return;
+		}
+		if (sets.length === 0) {
+			new Notice("You don't have any flashcard sets yet.");
+			return;
+		}
+		const recentSets = await client.recentSets();
+
+		new SetPickerModal(
+			this.app,
+			sets,
+			recentSets,
+			async (result) => {
+				if (result.createNew) return; // unreachable -- allowCreateNew is false below
+				await this.startReviewSession(client, result.set);
+			},
+			false
+		).open();
+	}
+
+	private async startReviewSession(client: PratiquerClient, targetSet: FlashcardSet): Promise<void> {
+		let cards;
+		try {
+			cards = await client.getDueCards(targetSet.id);
+		} catch (e) {
+			// Surfaces the backend's PAT-review-access-gate message directly
+			// when applicable ("...only available for sets you own" /
+			// "...not available on student accounts"), not just a generic
+			// failure -- see pratiquer-client.ts's getDueCards docstring.
+			new Notice(`Couldn't load due cards: ${e instanceof Error ? e.message : e}`, 8000);
+			return;
+		}
+
+		const reviewable = cards.filter(isReviewable);
+		const skipped = cards.length - reviewable.length;
+		if (skipped > 0) {
+			new Notice(
+				`Skipping ${skipped} card${skipped === 1 ? "" : "s"} of a type this plugin can't review yet (hotspot/cloze) -- review ${skipped === 1 ? "it" : "those"} in the web app.`
+			);
+		}
+
+		new ReviewModal(this.app, targetSet, reviewable, client).open();
 	}
 }
