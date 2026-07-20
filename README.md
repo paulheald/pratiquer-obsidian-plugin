@@ -102,3 +102,7 @@ npm run build  # production build + typecheck
 ```
 
 For local testing, symlink or copy `main.js`, `manifest.json`, and `styles.css` into `<your vault>/.obsidian/plugins/pratiquer/`.
+
+### Branches: `main` vs `dev`
+
+`main` is what real users track via BRAT — every tagged release on it is expected to work against whatever's actually live on `app.pratiquer.co`, not just whatever's merged in the `flashy_cards` backend repo (those two are **not** the same thing: a backend PR being merged doesn't mean it's been deployed). Active work that depends on an unreleased backend change happens on `dev` instead, tested locally via the plugin-folder method above against a Local/Custom server. A change only gets merged into `main` and tagged once its backend dependency is confirmed live in production — never before, even if the plugin-side code itself is finished and working.
